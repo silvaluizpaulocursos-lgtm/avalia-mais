@@ -1,0 +1,17 @@
+{
+  "name": "Avalia+",
+  "short_name": "Avalia+",
+  "description": "Gerador de avaliações, correção e análise pedagógica.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/avalia-mais/",
+  "scope": "/avalia-mais/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7fa",
+  "theme_color": "#163b59",
+  "icons": [
+    {"src":"/avalia-mais/icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"/avalia-mais/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
