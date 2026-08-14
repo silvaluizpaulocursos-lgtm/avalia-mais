@@ -769,6 +769,169 @@ input[type="checkbox"],input[type="radio"]{width:auto!important;min-width:18px!i
 @media(max-width:560px){.performance-criteria{grid-template-columns:1fr}}
 </style>
 
+
+<style id="avaliamais-drive-css">
+.drive-sync-card{border:2px solid #2563eb;background:#f8fbff}
+.drive-sync-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.drive-sync-actions button{margin:0}
+#driveSyncStatus{margin-top:10px;font-weight:700;color:#475569}
+.drive-connected{color:#166534!important}
+</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<script id="avaliamais-drive-js">
+/* Avalia+ — Google Drive sync (Google Identity Services / Drive API) */
+window.AMDrive = (() => {
+  const CLIENT_ID = '467137705809-6v7c0brqirdkrts09k47ki7mp8lfjm84.apps.googleusercontent.com';
+  const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+  const FILE_NAME = 'AvaliaMais_Dados.json';
+  let tokenClient = null;
+  let accessToken = '';
+  let ready = false;
+
+  const status = (msg, ok=false) => {
+    const el = document.getElementById('driveSyncStatus');
+    if (el) { el.textContent = msg; el.className = ok ? 'drive-connected' : ''; }
+  };
+
+  function init() {
+    if (!window.google?.accounts?.oauth2) return false;
+    if (tokenClient) return true;
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      callback: (resp) => {
+        if (resp?.error) { console.error(resp); status('❌ Não foi possível autorizar o Google Drive.'); const waiters=tokenWaiters.splice(0); waiters.forEach(resolve=>resolve(false)); return; }
+        accessToken = resp.access_token || '';
+        ready = !!accessToken;
+        status(ready ? '🟢 Google Drive conectado nesta sessão.' : '⚪ Google Drive não conectado.', ready);
+        const waiters=tokenWaiters.splice(0);
+        waiters.forEach(resolve=>resolve(ready));
+      }
+    });
+    return true;
+  }
+
+  let tokenWaiters = [];
+  async function connect() {
+    if (accessToken) return true;
+    if (!init()) {
+      status('⏳ A biblioteca do Google ainda está carregando. Tente novamente em alguns segundos.');
+      return false;
+    }
+    return new Promise(resolve => {
+      tokenWaiters.push(resolve);
+      tokenClient.requestAccessToken({prompt:'consent'});
+    });
+  }
+
+  async function ensureToken() {
+    if (accessToken) return true;
+    return await connect();
+  }
+
+  async function driveFetch(url, options={}) {
+    if (!accessToken) throw new Error('Google Drive não autorizado nesta sessão.');
+    const headers = new Headers(options.headers || {});
+    headers.set('Authorization', 'Bearer ' + accessToken);
+    const res = await fetch(url, {...options, headers});
+    if (res.status === 401) { accessToken=''; ready=false; status('🔐 A autorização expirou. Clique em Conectar ao Google Drive novamente.'); }
+    if (!res.ok) {
+      let detail=''; try { detail=await res.text(); } catch(_){}
+      throw new Error('Google Drive: HTTP '+res.status+' '+detail);
+    }
+    return res;
+  }
+
+  async function findRemoteFile() {
+    const q = encodeURIComponent("name='"+FILE_NAME+"' and trashed=false");
+    const res = await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&spaces=appDataFolder&fields=files(id,name,modifiedTime)');
+    const data = await res.json();
+    return data.files?.[0] || null;
+  }
+
+  function multipartBody(metadata, content) {
+    const boundary='-------AvaliaMaisDriveBoundary'+Date.now();
+    const body='--'+boundary+'\r\n'+
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n'+
+      JSON.stringify(metadata)+'\r\n'+
+      '--'+boundary+'\r\n'+
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n'+
+      content+'\r\n'+
+      '--'+boundary+'--';
+    return {body, contentType:'multipart/related; boundary='+boundary};
+  }
+
+  async function upload() {
+    try {
+      if (!await ensureToken()) return;
+      const backup = buildFullBackup();
+      const json = JSON.stringify(backup);
+      const file = await findRemoteFile();
+      if (file) {
+        await driveFetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(file.id)+'?uploadType=media', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:json});
+        status('☁️ Dados do Avalia+ enviados para o Google Drive.', true);
+      } else {
+        const mp = multipartBody({name:FILE_NAME, parents:['appDataFolder'], mimeType:'application/json'}, json);
+        await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime', {method:'POST', headers:{'Content-Type':mp.contentType}, body:mp.body});
+        status('☁️ Banco de dados do Avalia+ criado e enviado ao Google Drive.', true);
+      }
+      localStorage.setItem('avaliamais_drive_last_sync', new Date().toISOString());
+    } catch(err) { console.error(err); status('❌ Falha ao enviar dados para o Google Drive.'); alert('Não foi possível enviar os dados para o Google Drive.\n\n'+err.message); }
+  }
+
+  async function download() {
+    try {
+      if (!await ensureToken()) return;
+      const file = await findRemoteFile();
+      if (!file) { status('ℹ️ Ainda não existe um banco do Avalia+ no Google Drive.'); return; }
+      const res = await driveFetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(file.id)+'?alt=media');
+      const backup = await res.json();
+      const validation = validateBackup(backup);
+      if (!validation.ok) { status('❌ O arquivo do Drive não é um backup válido do Avalia+.'); alert(validation.error); return; }
+      if (!confirm('Os dados do Google Drive substituirão os dados atuais deste navegador.\n\nRecomendação: faça um backup local antes de continuar.\n\nDeseja continuar?')) return;
+      const safety = buildFullBackup();
+      set('v10_last_pre_drive_restore_backup', safety);
+      for (const k of APP_BACKUP_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(backup.data,k)) {
+          const v=backup.data[k];
+          if(v===null||v===undefined) localStorage.removeItem(k); else localStorage.setItem(k,JSON.stringify(v));
+        }
+      }
+      rehydratePersistentData();
+      render();
+      localStorage.setItem('avaliamais_drive_last_sync', new Date().toISOString());
+      status('⬇️ Dados do Google Drive carregados no Avalia+.', true);
+      alert('Dados do Google Drive restaurados com sucesso.');
+    } catch(err) { console.error(err); status('❌ Falha ao baixar os dados do Google Drive.'); alert('Não foi possível baixar os dados do Google Drive.\n\n'+err.message); }
+  }
+
+  async function sync() {
+    try {
+      if (!await ensureToken()) return;
+      const file = await findRemoteFile();
+      if (!file) { await upload(); return; }
+      const remoteRes = await driveFetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(file.id)+'?alt=media');
+      const remote = await remoteRes.json();
+      const remoteTime = new Date(file.modifiedTime || remote.createdAt || 0).getTime();
+      const localTime = new Date(localStorage.getItem('avaliamais_drive_last_sync') || 0).getTime();
+      if (remoteTime > localTime && confirm('Há dados mais recentes no Google Drive.\n\nDeseja baixar o banco do Drive para este dispositivo?\n\nCancelar mantém os dados locais e envia estes dados ao Drive.')) {
+        const validation=validateBackup(remote);
+        if(!validation.ok) throw new Error(validation.error);
+        for(const k of APP_BACKUP_KEYS){ if(Object.prototype.hasOwnProperty.call(remote.data,k)){ const v=remote.data[k]; if(v==null)localStorage.removeItem(k); else localStorage.setItem(k,JSON.stringify(v)); }}
+        rehydratePersistentData(); render();
+        localStorage.setItem('avaliamais_drive_last_sync', new Date().toISOString());
+        status('🔄 Sincronização concluída: dados do Drive carregados.', true);
+        return;
+      }
+      await upload();
+    } catch(err) { console.error(err); status('❌ Falha na sincronização.'); alert('Não foi possível sincronizar.\n\n'+err.message); }
+  }
+
+  function getState(){ return {connected:ready,lastSync:localStorage.getItem('avaliamais_drive_last_sync')||''}; }
+  return {connect,upload,download,sync,getState};
+})();
+</script>
 </head>
 <body>
 <div aria-label="Avalia+ — Kria Educacional By Luiz Paulo Silva" id="appTopBar">
@@ -1561,6 +1724,18 @@ input[type="checkbox"],input[type="radio"]{width:auto!important;min-width:18px!i
 </label>
 </div>
 <div class="small" id="backupStatus" style="margin-top:10px"></div>
+</div>
+
+<div class="card drive-sync-card">
+<h3>☁️ Sincronização com Google Drive</h3>
+<p class="small">Use sua conta Google para manter os dados do Avalia+ sincronizados entre computadores e, posteriormente, o aplicativo do celular. Os dados continuam armazenados localmente para uso offline.</p>
+<div class="drive-sync-actions">
+<button type="button" onclick="AMDrive.connect()">🔐 Conectar ao Google Drive</button>
+<button class="secondary" type="button" onclick="AMDrive.upload()">⬆️ Enviar dados para o Drive</button>
+<button class="secondary" type="button" onclick="AMDrive.download()">⬇️ Baixar dados do Drive</button>
+<button class="secondary" type="button" onclick="AMDrive.sync()">🔄 Sincronizar agora</button>
+</div>
+<div id="driveSyncStatus">⚪ Google Drive não conectado.</div>
 </div>
 <div class="card" style="border:2px solid #b91c1c">
 <h3>☢️ Limpeza completa do aplicativo</h3>
