@@ -1838,11 +1838,20 @@ function ensureClassDisciplines(cid){
  const ds=classDisciplines(cid); c.disciplines=ds; saveClassStore(classStore()); return ds;
 }
 function addDisciplineToClass(cid,name){
- const c=classStore().find(x=>String(x.id)===String(cid)); if(!c)return false;
- const n=normalizeDisciplineName(name); if(!n)return false;
- const ds=classDisciplines(cid);
- if(ds.some(x=>x.toLocaleLowerCase('pt-BR')===n.toLocaleLowerCase('pt-BR')))return false;
- c.disciplines=[...ds,n]; saveClassStore(classStore()); return true;
+ const id=String(cid||'').trim();
+ const n=normalizeDisciplineName(name);
+ if(!id||!n)return false;
+ const classes=classStore();
+ const index=classes.findIndex(x=>String(x.id)===id);
+ if(index<0)return false;
+ const current=Array.isArray(classes[index].disciplines)?classes[index].disciplines.map(normalizeDisciplineName).filter(Boolean):[];
+ const recovered=classDisciplines(id);
+ const merged=[...current,...recovered];
+ if(merged.some(x=>x.toLocaleLowerCase('pt-BR')===n.toLocaleLowerCase('pt-BR')))return false;
+ classes[index]={...classes[index],disciplines:[...merged,n]};
+ const saved=saveClassStore(classes);
+ const persisted=Array.isArray(saved)?saved.find(x=>String(x.id)===id):null;
+ return !!(persisted&&Array.isArray(persisted.disciplines)&&persisted.disciplines.some(x=>String(x).toLocaleLowerCase('pt-BR')===n.toLocaleLowerCase('pt-BR')));
 }
 function removeDisciplineFromClass(cid,name){
  const c=classStore().find(x=>String(x.id)===String(cid)); if(!c)return;
@@ -1867,10 +1876,23 @@ function renderClassDisciplines(){
  const ds=classDisciplines(cid); box.innerHTML=ds.length?`<div class="toolbar">${ds.map(d=>`<span class="badge" style="background:#eef2ff;color:#2947b8;padding:8px 11px">${esc(d)} <button type="button" class="light" style="padding:2px 6px;margin-left:5px" onclick="editClassDiscipline('${esc(cid)}','${esc(d)}')">✏️</button><button type="button" class="light" style="padding:2px 6px;margin-left:3px" onclick="removeClassDiscipline('${esc(cid)}','${esc(d)}')">×</button></span>`).join('')}</div>`:'<div class="empty">Nenhuma disciplina cadastrada. Adicione Biologia, Química, Física etc.</div>';
 }
 function addDisciplineToSelectedClass(){
- const cid=String($('disciplineClassSelect')?.value||selectedStudentClassId||''); const name=String($('newDisciplineName')?.value||'').trim();
- if(!cid)return alert('Selecione a turma.'); if(!name)return alert('Informe a disciplina.');
- if(!addDisciplineToClass(cid,name))return alert('Essa disciplina já está cadastrada para a turma.');
- $('newDisciplineName').value=''; selectedStudentClassId=cid; render(); alert(`Disciplina "${name}" adicionada à turma.`);
+ const cid=String($('disciplineClassSelect')?.value||selectedStudentClassId||'').trim();
+ const name=String($('newDisciplineName')?.value||'').trim();
+ if(!cid)return alert('Selecione a turma.');
+ if(!name)return alert('Informe a disciplina.');
+ const ok=addDisciplineToClass(cid,name);
+ if(!ok){
+  const exists=classDisciplines(cid).some(x=>normalizeKey(x)===normalizeKey(name));
+  return alert(exists?'Essa disciplina já está cadastrada para a turma.':'Não foi possível salvar a disciplina no armazenamento do navegador.');
+ }
+ selectedStudentClassId=cid;
+ if($('newDisciplineName'))$('newDisciplineName').value='';
+ renderStudents();
+ populateAllDisciplineSelectors(cid);
+ const dcs=$('disciplineClassSelect');
+ if(dcs)dcs.value=cid;
+ renderClassDisciplines();
+ alert(`Disciplina "${name}" adicionada à turma.`);
 }
 function editClassDiscipline(cid,name){
  if(typeof editDisciplineInClass==='function')return editDisciplineInClass(cid,name);
@@ -7974,8 +7996,10 @@ function clearAll(){
 }
 
 function render(){
+ // Primeiro reidrata o banco persistido; depois executa o reparo relacional.
+ rehydratePersistentData();
  relationalIntegrityRepair(true);
- renderCurriculumClassSelector();renderPlanningRegistry();renderExamSkillSelector();rehydratePersistentData();
+ renderCurriculumClassSelector();renderPlanningRegistry();renderExamSkillSelector();
  safeRender('manage',renderManagement);safeRender('students',renderStudents);safeRender('examClasses',renderClassSelectors);safeRender('exam',renderExam);safeRender('savedEvaluations',renderSavedEvaluations);safeRender('questionBank',renderQuestionBank);safeRender('planningRegistry',renderPlanningRegistry);safeRender('plan',renderPlan);safeRender('ai',updateAIStatus);safeRender('savedPlans',renderSavedPlans);safeRender('cards',renderCards);safeRender('exports',renderVersionExportButtons);safeRender('results',renderResults);safeRender('analysis',renderAnalysis);safeRender('curricularMapSelectors',()=>{populateCurricularMapSelectors();renderCurricularMap();renderPedagogicalCycle();});safeRender('dashboard',renderDashboard);safeRender('manualClasses',manualRefreshClasses);safeRender('acompanhamento',()=>AP.render());
 }
 
