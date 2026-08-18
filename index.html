@@ -502,7 +502,7 @@ input[type="checkbox"],input[type="radio"]{width:auto!important;min-width:18px!i
 .return-button{width:40px;height:40px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:21px;font-weight:900;line-height:1;cursor:pointer;background:#fff;color:#17324d;border:1px solid #cbd5e1;box-shadow:0 2px 6px rgba(15,45,70,.10)}
 .return-button:hover{transform:translateX(-2px);box-shadow:0 3px 9px rgba(15,45,70,.16)}
 .return-label{font-size:12px;color:#64748b;font-weight:700}
-.daily-lesson .toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap;margin:0}.daily-lesson-action{width:auto!important;min-width:145px;display:inline-flex;align-items:center;justify-content:center;gap:7px;text-align:center;cursor:pointer;border:0;white-space:nowrap;padding:9px 13px}.daily-lesson-action:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,.08)}@media(max-width:620px){.daily-lesson{flex-wrap:wrap!important}.daily-lesson>span:first-child{flex:1 1 100%}.daily-lesson .toolbar{width:100%;justify-content:flex-start;overflow-x:auto}.daily-lesson-action{min-width:135px}}
+.daily-lesson-action{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;cursor:pointer;border:0}.daily-lesson-action:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .ap-absent-row{opacity:.72}.ap-summary-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:12px 0}.ap-summary-strip .ap-card{margin:0}.ap-criterion{font-size:11px;color:var(--muted)}.ap-criterion strong{display:block;font-size:21px;color:var(--nav);margin-top:3px}
 @media(max-width:600px){.return-button{width:36px;height:36px;font-size:19px}}
 
@@ -795,7 +795,6 @@ window.AMDrive = (() => {
   let ready = false;
   let autoTimer = null;
   let autoBusy = false;
-  let reconnectTimer = null;
 
   const status = (msg, ok=false) => {
     const el = document.getElementById('driveSyncStatus');
@@ -815,8 +814,6 @@ window.AMDrive = (() => {
         status(ready ? '🟢 Google Drive conectado nesta sessão.' : '⚪ Google Drive não conectado.', ready);
         const waiters=tokenWaiters.splice(0);
         waiters.forEach(resolve=>resolve(ready));
-        // Assim que o celular autorizar o Drive, envia imediatamente os dados locais.
-        if(ready) setTimeout(()=>autoUpload(), 300);
       }
     });
     return true;
@@ -918,7 +915,7 @@ window.AMDrive = (() => {
   function scheduleAutoUpload() {
     if (!accessToken || !ready) return;
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(() => autoUpload(), 1200);
+    autoTimer = setTimeout(() => autoUpload(), 5000);
   }
 
   async function download() {
@@ -970,10 +967,6 @@ window.AMDrive = (() => {
   }
 
   function getState(){ return {connected:ready,lastSync:localStorage.getItem('avaliamais_drive_last_sync')||''}; }
-  // Tenta novamente quando a conexão voltar, inclusive no celular.
-  window.addEventListener('online',()=>{ if(accessToken && ready) scheduleAutoUpload(); });
-  window.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && accessToken && ready) scheduleAutoUpload(); });
-
   return {connect,upload,download,sync,autoUpload,scheduleAutoUpload,getState};
 })();
 </script>
@@ -1060,15 +1053,6 @@ window.AMDrive = (() => {
 </style>
 </head>
 <body>
-<div class="ap-modal" id="apModal" aria-hidden="true"><div class="ap-modalbox" id="apModalBox"></div></div>
-<script>
-(function(){
-  const m=document.getElementById('apModal');
-  if(!m)return;
-  m.addEventListener('click',function(e){if(e.target===m&&window.AP&&typeof window.AP.close==='function')window.AP.close();});
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open')&&window.AP&&typeof window.AP.close==='function')window.AP.close();});
-})();
-</script>
 <div aria-label="Avalia+ — Kria Educacional By Luiz Paulo Silva" id="appTopBar">
 <div>
 <span class="app-name">Avalia+</span>
@@ -1506,6 +1490,12 @@ window.AMDrive = (() => {
 <option value="">📝 Todas as provas</option>
 </select>
 </div>
+<div>
+<label>Aluno (percurso longitudinal)</label>
+<select id="analysisStudentSelect" onchange="selectAnalysisLongitudinalStudent()">
+<option value="">👨‍🎓 Selecione um aluno</option>
+</select>
+</div>
 </div>
 <div class="toolbar">
 <button class="secondary" onclick="clearAnalysisFilters()">↺ Limpar filtros</button> <button class="secondary" onclick="exportCurrentAnalysis()">📄 Exportar análise</button>
@@ -1547,7 +1537,7 @@ window.AMDrive = (() => {
 </div>
 <div class="card" id="longitudinalStudentCard">
 <h3>🧬 Acompanhamento longitudinal do aluno</h3>
-<p class="small">Acompanhe o mesmo estudante ao longo dos anos letivos, independentemente da turma atual. O sistema cruza <b>ano letivo × habilidade × desempenho</b> usando as avaliações corrigidas.</p>
+<p class="small">Acompanhe o mesmo estudante ao longo dos anos letivos, independentemente da turma atual. O sistema cruza <b>ano letivo × habilidade × desempenho</b> usando as avaliações corrigida Selecione o aluno acima ou nesta seção para carregar o percurso.</p>
 <div class="grid">
 <div>
 <label>Buscar aluno pelo nome</label>
@@ -1639,67 +1629,73 @@ window.AMDrive = (() => {
 </section>
 <section id="planning">
 <div class="return-row"><button aria-label="Voltar ao início" class="return-button" onclick="show('dashboard')" title="Voltar ao início" type="button">←</button><span class="return-label">Voltar</span></div>
-<h2>📚 Planejamento de aula</h2>
-<div class="alert ok"><b>Planejamento integrado à grade de horários.</b> A data da aula é carregada automaticamente a partir dos horários cadastrados para a turma e disciplina. O planejamento fica gravado no aplicativo e pode ser editado depois.</div>
-
+<h2>📚 Planejamento por habilidade</h2>
 <div class="card">
-<h3>1. Identificação da aula</h3>
+<h3>1. Selecionar turma e disciplina</h3>
+<p class="small">As habilidades utilizadas no planejamento vêm do cadastro anual da turma. Não é necessário redigitar código ou texto.</p>
 <div class="grid">
- <div><label>Turma / Ano escolar</label><select id="lessonPlanClass" onchange="lessonPlanClassChanged()"><option value="">Selecione a turma</option></select><div class="small" id="lessonPlanGrade" style="margin-top:5px"></div></div>
- <div><label>Disciplina</label><select id="lessonPlanSubject" onchange="lessonPlanSubjectChanged()"><option value="">Selecione a disciplina</option></select></div>
- <div><label>Data da aula <span class="small">(vinculada à grade de horários)</span></label><select id="lessonPlanDate" onchange="lessonPlanDateChanged()"><option value="">Selecione a data</option></select><div class="small" id="lessonPlanScheduleMeta" style="margin-top:5px"></div></div>
- <div><label>Habilidade (BNCC)</label><select id="lessonPlanSkill" onchange="lessonPlanSkillChanged()"><option value="">Selecione a habilidade</option></select><div class="small" id="lessonPlanSkillMeta" style="margin-top:5px"></div></div>
+<div><label>Turma</label><select id="planClassSelect" onchange="selectPlanningClass(this.value)"><option value="">Selecione a turma</option></select></div>
+<div><label>Disciplina</label><select id="planSubject" onchange="renderPlanningRegistry()"><option value="">Selecione a disciplina</option></select></div>
 </div>
-<div id="lessonPlanDescriptors" style="margin-top:10px"></div>
 </div>
-
 <div class="card">
-<h3>2. Pré-requisitos e foco da aula</h3>
-<div class="grid">
- <div><label>Pré-requisitos / conhecimentos prévios</label><textarea id="lessonPlanPrereq" rows="4" placeholder="Quais conhecimentos prévios os estudantes precisam mobilizar?"></textarea></div>
- <div><label>Temática principal — Tema da aula</label><textarea id="lessonPlanTheme" rows="4" placeholder="Ex.: Cálculo de descontos e porcentagens em situações do cotidiano."></textarea></div>
+<h3>Habilidades cadastradas para a turma</h3>
+<div id="skillRegistry"></div>
 </div>
-</div>
-
-<div class="card">
-<h3>3. Metodologia e recursos</h3>
-<p class="small">Descreva como a aula será desenvolvida e quais materiais, recursos, experimentos, textos, vídeos, laboratório, projetor etc. serão utilizados.</p>
-<textarea id="lessonPlanMethodology" rows="6" placeholder="Metodologia, estratégias, dinâmica da aula e recursos necessários..."></textarea>
-</div>
-
-<div class="card">
-<h3>4. Sequência didática</h3>
-<p class="small">A sequência abaixo será gravada junto com o planejamento. Você pode adicionar, editar, reordenar e excluir etapas.</p>
-<div id="lessonPlanSequence"></div>
-<div class="toolbar" style="margin-top:10px"><button class="secondary" type="button" onclick="addLessonPlanStep()">＋ Adicionar etapa</button></div>
-</div>
-
-<div class="card" style="border-left:4px solid #2563eb">
-<h3>5. Tarefas para o dia seguinte</h3>
-<p class="small">Registre o que os estudantes deverão trazer, estudar, pesquisar ou realizar para a próxima aula.</p>
-<textarea id="lessonPlanNextTask" rows="4" placeholder="Ex.: Revisar o conteúdo, responder as questões 1 a 5 e trazer o material para a próxima aula."></textarea>
-</div>
-
 <div class="card" style="border-left:4px solid #7c3aed">
-<h3>6. Links e materiais digitais</h3>
-<p class="small">Adicione links de vídeos, apresentações, textos, simuladores ou outros materiais que serão usados na aula.</p>
-<div id="lessonPlanLinks"></div>
-<div class="toolbar" style="margin-top:10px"><button class="secondary" type="button" onclick="addLessonPlanLink()">＋ Adicionar link</button></div>
+<h3>2. Gerar planejamento profissional</h3>
+<p class="small">A IA parte exclusivamente da habilidade e dos descritores selecionados para construir um planejamento utilizável em sala. <b>O planejamento não gera questões.</b></p>
+<div class="grid">
+<div><label>Habilidade selecionada</label><select id="planSkillSelect" onchange="onPlanningSkillChanged()"><option value="">Selecione uma habilidade</option></select><div class="small" id="planSkillMeta" style="margin-top:5px"></div><div id="planDescriptorSelect" style="margin-top:8px"></div></div>
+<div><label>Número de aulas</label><select id="planLessons"><option value="0">Automático — IA estima</option><option value="1">1 aula — 50 min</option><option value="2">2 aulas — 100 min</option><option value="3">3 aulas — 150 min</option><option value="4">4 aulas — 200 min</option><option value="5">5 aulas — 250 min</option><option value="6">6 aulas — 300 min</option><option value="8">8 aulas — 400 min</option></select></div>
+<div><label>Conhecimentos prévios adicionais</label><textarea id="planPrereq" placeholder="Opcional. Acrescente conhecimentos que a turma já deveria dominar." rows="3"></textarea></div>
+<div><label>Recorte/conteúdo desejado</label><input id="planContent" placeholder="Opcional — use somente se quiser restringir o recorte."/></div>
 </div>
-
-<div class="card" style="border-left:4px solid #16a34a">
-<h3>7. Salvar planejamento</h3>
+<div class="toolbar" style="margin-top:12px">
+<button onclick="generatePlan()">✨ Gerar com IA</button>
+<button class="secondary" onclick="generateSelectedPlans()">📚 Gerar para todas as habilidades</button>
+<button class="secondary" onclick="showAISettings()">⚙️ Configurar IA real</button>
+</div>
+</div>
+<div class="alert ok" id="autoPlanningNote"><b>Regra do planejamento:</b> a IA deve gerar <b>tema da aula, metodologia geral alinhada à habilidade, conteúdos mínimos, pré-requisitos, objetivos cognitivos e sequência didática</b>. Questões ficam fora deste módulo.</div>
+<div class="ai-panel">
+<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+<div><span class="ai-badge">✨ IA PEDAGÓGICA REAL</span> <span class="ai-status warn" id="aiStatus">Configure a conexão</span></div>
+<span class="ai-status">Sem chave gravada no código do aplicativo</span>
+</div>
+<p class="small"><b>Funcionamento:</b> quando uma conexão é configurada, o aplicativo envia a habilidade para o provedor de IA, recebe JSON estruturado, valida a resposta e rejeita automaticamente planejamentos genéricos ou incompletos. Sem conexão, o sistema pode gerar apenas um <b>rascunho local de segurança</b>; ele não é equivalente à IA disciplinar.</p>
 <div class="toolbar">
- <button type="button" onclick="saveLessonPlan()">💾 Salvar planejamento</button>
- <button class="secondary" type="button" onclick="clearLessonPlanForm()">🧹 Limpar formulário</button>
+<button onclick="generateAIPlan()">✨ Gerar planejamento agora</button>
+<button class="secondary" onclick="runPlanningDiagnostics()">🧪 Verificar módulo</button>
 </div>
-<div class="small" id="lessonPlanSaveStatus" style="margin-top:8px"></div>
 </div>
-
-<div class="card">
-<h3>🗂️ Planejamentos gravados</h3>
-<div class="toolbar"><select id="savedLessonPlanClassFilter" onchange="renderSavedLessonPlans()"><option value="">Todas as turmas</option></select><select id="savedLessonPlanSubjectFilter" onchange="renderSavedLessonPlans()"><option value="">Todas as disciplinas</option></select></div>
-<div id="savedLessonPlansList"></div>
+<div class="card" id="aiSettingsPanel" style="display:none">
+<h3>🔌 Conexão com IA real</h3>
+<p class="small">Para um aplicativo distribuído no mercado, o ideal é usar um <b>proxy/backend próprio</b> e nunca expor uma chave de API no navegador. Para uso individual/local, você pode informar uma chave diretamente aqui; ela fica somente no armazenamento local deste navegador.</p>
+<div class="grid">
+<div><label>Protocolo</label><select id="aiProtocol">
+<option value="responses">OpenAI — Responses API</option>
+<option value="chat">OpenAI-compatible — Chat Completions</option>
+</select></div>
+<div><label>Endpoint</label><input id="aiEndpoint" placeholder="https://api.openai.com/v1/responses"/></div>
+<div><label>Modelo</label><input id="aiModel" placeholder="Informe o modelo disponível na sua conta"/></div>
+<div><label>Chave de API</label><input autocomplete="off" id="aiKey" placeholder="sk-..." type="password"/></div>
+</div>
+<div class="toolbar" style="margin-top:10px">
+<button onclick="saveAISettings()">💾 Salvar configuração</button>
+<button class="secondary" onclick="testAIConnection()">🔌 Testar conexão</button>
+<button class="secondary" onclick="clearAISettings()">🗑️ Limpar chave/configuração</button>
+</div>
+<div class="small" id="aiTestResult" style="margin-top:8px"></div>
+<div class="small" style="margin-top:8px"><b>Importante:</b> uma página HTML estática não consegue proteger uma chave contra quem inspeciona o navegador. Em produção, a opção profissional é apontar o endpoint para seu servidor/proxy.</div>
+</div>
+<div class="card" id="aiOutput" style="display:none"></div>
+<div class="card" id="savedPlansCard">
+<h3>🗂️ Planejamentos salvos</h3>
+<div class="toolbar">
+<button class="danger" onclick="deleteAllSavedPlans()">🗑️ Excluir todos os planejamentos salvos</button>
+</div>
+<div id="savedPlansList"></div>
 </div>
 </section>
 <section id="exports">
@@ -1898,16 +1894,16 @@ window.AMDrive = (() => {
 <button class="secondary" onclick="AP.page('home')">🏠 Início</button><button class="secondary" onclick="AP.page('classes')">👥 Turmas e alunos</button><button class="secondary" onclick="AP.page('schedule')">🗓️ Horários</button><button class="secondary" onclick="AP.page('history')">📋 Histórico</button><button class="secondary" onclick="AP.page('reports')">📊 Relatórios</button>
 </div>
 <div class="ap-page" id="ap-home">
-<div class="ap-card" style="background:#f7f9fc"><div class="toolbar"><div style="min-width:220px"><label>Turma para acompanhamento</label><select id="apDashClass" onchange="AP.selectClass(this.value)"></select></div><div style="min-width:220px"><label>Disciplina</label><select id="apDashSubject" onchange="AP.renderHome()"><option value="">Selecione a disciplina</option></select></div><div class="ap-muted">Os índices abaixo mostram as ocorrências marcadas. “Faltou” usa o total de alunos; os demais usam somente os alunos presentes.</div></div><div class="ap-summary-strip"><div class="ap-card ap-kpi"><span class="ap-criterion">Faltou</span><strong id="apAbsent">0%</strong><small id="apAbsentCount" class="ap-muted">0 de 0 alunos</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Não fez atividade</span><strong id="apAct">0%</strong><small id="apActCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Não trouxe livro</span><strong id="apBook">0%</strong><small id="apBookCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Conversou</span><strong id="apTalk">0%</strong><small id="apTalkCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Dormindo</span><strong id="apDisturb">0%</strong><small id="apDisturbCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Presentes</span><strong id="apPresenceCount">0</strong><small id="apPresenceTotal" class="ap-muted">de 0 alunos</small></div></div></div><div id="apTodayLessons"></div>
-<div class="ap-grid2"><div class="ap-card"><h3>🚫 Quem mais falta</h3><div id="apAttAbsent"></div></div><div class="ap-card"><h3>⚠️ Quem não faz a atividade</h3><div id="apAttAct"></div></div><div class="ap-card"><h3>📚 Quem não traz o livro</h3><div id="apAttBook"></div></div><div class="ap-card"><h3>🗣️ Quem mais conversa</h3><div id="apAttTalk"></div></div><div class="ap-card"><h3>😴 Quem mais dorme</h3><div id="apAttDist"></div></div></div>
-<div class="ap-card"><h3>Desempenho por turma</h3><div id="apClassPerf"></div></div><div class="ap-card"><div class="ap-muted"><b>Indicadores por aluno:</b> a lista é ordenada do maior para o menor número de ocorrências. Faltas usam o total de aulas; não fez atividade, não trouxe livro, conversou e dormindo usam somente os alunos presentes. O filtro de disciplina selecionado no painel também é aplicado a estas listas.</div></div>
+<div class="ap-card" style="background:#f7f9fc"><div class="toolbar"><div style="min-width:220px"><label>Turma para acompanhamento</label><select id="apDashClass" onchange="AP.selectClass(this.value)"></select></div><div style="min-width:220px"><label>Disciplina</label><select id="apDashSubject" onchange="AP.renderHome()"><option value="">Selecione a disciplina</option></select></div><div class="ap-muted">Os índices abaixo mostram as ocorrências marcadas. “Faltou” usa o total de alunos; os demais usam somente os alunos presentes.</div></div><div class="ap-summary-strip"><div class="ap-card ap-kpi"><span class="ap-criterion">Faltou</span><strong id="apAbsent">0%</strong><small id="apAbsentCount" class="ap-muted">0 de 0 alunos</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Não fez atividade</span><strong id="apAct">0%</strong><small id="apActCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Não trouxe livro</span><strong id="apBook">0%</strong><small id="apBookCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Conversou</span><strong id="apTalk">0%</strong><small id="apTalkCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Perturbou</span><strong id="apDisturb">0%</strong><small id="apDisturbCount" class="ap-muted">0 de 0 presentes</small></div><div class="ap-card ap-kpi"><span class="ap-criterion">Presentes</span><strong id="apPresenceCount">0</strong><small id="apPresenceTotal" class="ap-muted">de 0 alunos</small></div></div></div><div id="apTodayLessons"></div>
+<div class="ap-grid2"><div class="ap-card"><h3>🚫 Quem mais falta</h3><div id="apAttAbsent"></div></div><div class="ap-card"><h3>⚠️ Quem não faz a atividade</h3><div id="apAttAct"></div></div><div class="ap-card"><h3>📚 Quem não traz o livro</h3><div id="apAttBook"></div></div><div class="ap-card"><h3>🗣️ Quem mais conversa</h3><div id="apAttTalk"></div></div><div class="ap-card"><h3>🚨 Quem mais perturba</h3><div id="apAttDist"></div></div></div>
+<div class="ap-card"><h3>Desempenho por turma</h3><div id="apClassPerf"></div></div><div class="ap-card"><div class="ap-muted"><b>Indicadores por aluno:</b> a lista é ordenada do maior para o menor número de ocorrências. Faltas usam o total de aulas; não fez atividade, não trouxe livro, conversou e perturbou usam somente os alunos presentes. O filtro de disciplina selecionado no painel também é aplicado a estas listas.</div></div>
 </div>
 <div class="ap-page" id="ap-classes" style="display:none"><div class="ap-head"><div><h2>Turmas e alunos</h2><div class="ap-muted">Cadastro compartilhado com o Avalia+.</div></div><div class="ap-toolbar"><button class="secondary" onclick="AP.newClass()">＋ Turma</button><button onclick="AP.newStudent()">＋ Aluno</button></div></div><div id="apClassesList"></div></div>
 <div class="ap-page" id="ap-schedule" style="display:none"><div class="ap-head"><div><h2>Horários</h2><div class="ap-muted">Ao chegar o dia, a aula aparece automaticamente no início do módulo.</div></div><button onclick="AP.newSchedule()">＋ Adicionar horário</button></div><div id="apWeek"></div></div>
 <div class="ap-page" id="ap-history" style="display:none"><div class="ap-head"><div><h2>Histórico individual</h2><div class="ap-muted">Exclua um acompanhamento específico ou todos os acompanhamentos lançados.</div></div><button class="danger" type="button" onclick="AP.deleteAllLessons()">🗑️ Apagar todos os acompanhamentos</button></div><div class="ap-card"><label>Aluno</label><select id="apHistStudent" onchange="AP.renderHistory()"></select></div><div id="apHistOut"></div></div>
-<div class="ap-page" id="ap-reports" style="display:none"><div class="ap-head"><div><h2>📊 Fechamento do período</h2><div class="ap-muted">Somatório do acompanhamento da turma por período, com totais e resumo individual dos alunos.</div></div><button class="secondary" onclick="window.print()">Imprimir / PDF</button></div><div class="ap-card"><div class="ap-form"><div><label>Turma</label><select id="apRepClass" onchange="AP.selectReportClass(this.value)"></select></div><div><label>Disciplina</label><select id="apRepSubject" onchange="AP.renderReport()"><option value="">Selecione a disciplina</option></select></div><div><label>De</label><input id="apRepFrom" onchange="AP.renderReport()" type="date"/></div><div><label>Até</label><input id="apRepTo" onchange="AP.renderReport()" type="date"/></div></div></div><div id="apRepOut"></div></div>
+<div class="ap-page" id="ap-reports" style="display:none"><div class="ap-head"><div><h2>Relatórios</h2><div class="ap-muted">Desempenho por turma e aluno.</div></div><button class="secondary" onclick="window.print()">Imprimir / PDF</button></div><div class="ap-card"><div class="ap-form"><div><label>Turma</label><select id="apRepClass" onchange="AP.selectReportClass(this.value)"></select></div><div><label>Disciplina</label><select id="apRepSubject" onchange="AP.renderReport()"><option value="">Selecione a disciplina</option></select></div><div><label>De</label><input id="apRepFrom" onchange="AP.renderReport()" type="date"/></div><div><label>Até</label><input id="apRepTo" onchange="AP.renderReport()" type="date"/></div></div></div><div id="apRepOut"></div></div>
 </div>
-
+<div class="ap-modal" id="apModal"><div class="ap-modalbox" id="apModalBox"></div></div>
 </section>
 </main>
 <script>
@@ -3682,7 +3678,7 @@ function renderScanForm(autoAnswers={},confidence={},automatic=false){
  const {ex,s,v}=identity||{};
  if(!ex||!v){$('scanForm').innerHTML='<div class="card"><div class="alert warn">Nenhuma avaliação identificada.</div></div>';return}
  const selectedStudentId=s?.id||'';
- const existing=s?responses.find(r=>r.studentId===s.id&&r.examId===ex.id&&r.version===v.letter&&!responseIsCancelled(r)):null;
+ const existing=s?responses.find(r=>r.studentId===s.id&&r.examId===ex.id&&r.version===v.letter):null;
  const answerFor=id=>Object.prototype.hasOwnProperty.call(autoAnswers,id)?autoAnswers[id]:(existing?.answers?.[id]||'');
  const studentField=s
    ? `<div><b>Aluno</b><br><strong>${esc(s.name)}</strong></div>`
@@ -3706,8 +3702,8 @@ function saveScan(){
  if(!s){const sid=String($('scanStudent')?.value||'');if(!sid)return alert('Selecione o aluno antes de salvar a correção.');s=students.find(x=>String(x.id)===sid);if(!s)return alert('Aluno não encontrado.');identity.s=s;}
  let answers={};
  v.questions.forEach((id,i)=>{const el=$('r'+i);if(el)answers[id]=el.value});
- let idx=responses.findIndex(r=>r.studentId===s.id&&r.examId===ex.id&&r.version===v.letter&&!responseIsCancelled(r)),
- record={...(idx>=0?responses[idx]:{}),id:idx>=0?responses[idx].id:Date.now(),studentId:s.id,examId:ex.id,version:v.letter,answers,source:'camera-qr-omr',cancelled:false,updatedAt:new Date().toISOString()};
+ let idx=responses.findIndex(r=>r.studentId===s.id&&r.examId===ex.id&&r.version===v.letter),
+ record={id:idx>=0?responses[idx].id:Date.now(),studentId:s.id,examId:ex.id,version:v.letter,answers,source:'camera-qr-omr'};
  if(idx>=0)responses[idx]=record;else responses.push(record);
  set('v10_responses',responses);identity=null;
  $('scanForm').innerHTML='<div class="card"><div class="alert ok"><b>✅ Correção registrada.</b> O resultado foi associado ao aluno e à versão correta.</div></div>';
@@ -3744,78 +3740,19 @@ function renderAnalysisFilters(){
  if(exams.some(e=>String(e.id)===String(oldExam)))examSel.value=oldExam;
 }
 
-/* ===== Respostas canônicas / lançamentos canceláveis =====
-   Um aluno + avaliação + versão deve ter apenas UM lançamento ativo usado
-   pelos cálculos. Registros antigos/duplicados podem permanecer armazenados
-   para auditoria, mas um lançamento marcado como cancelado nunca entra nos
-   resultados. Quando existem vários ativos, vence o mais recente por
-   updatedAt; em empate, vence a posição mais recente no banco. ===== */
-function responseIsCancelled(r){ return !!(r && (r.cancelled===true || r.cancelledAt)); }
-function responseKey(r){ return `${r?.studentId}|${r?.examId}`; }
-function responseTime(r,index=0){
-  const t=r?.updatedAt?Date.parse(r.updatedAt):0;
-  return Number.isFinite(t)?t:index;
-}
-function canonicalActiveResponses(source=responses){
-  const latest={};
-  (Array.isArray(source)?source:[]).forEach((r,i)=>{
-    if(!r || responseIsCancelled(r))return;
-    const key=responseKey(r), prev=latest[key];
-    if(!prev || responseTime(r,i)>=responseTime(prev.record,prev.index)) latest[key]={record:r,index:i};
-  });
-  return Object.values(latest).map(x=>x.record);
-}
-function responseLaunchCount(studentId,examId){
-  return responses.filter(r=>String(r?.studentId)===String(studentId)&&Number(r?.examId)===Number(examId)).length;
-}
-function cancelResponse(id){
-  const r=responses.find(x=>String(x?.id)===String(id));
-  if(!r)return;
-  if(!confirm(`Cancelar este lançamento de correção?\n\nO registro será preservado para auditoria, mas deixará de ser considerado nos resultados.\n\nAluno: ${students.find(s=>String(s.id)===String(r.studentId))?.name||'Aluno'}\nAvaliação: ${exams.find(e=>Number(e.id)===Number(r.examId))?.name||'Avaliação'}\nVersão: ${r.version||'—'}`))return;
-  r.cancelled=true; r.cancelledAt=new Date().toISOString();
-  set('v10_responses',responses);
-  renderDashboard(); renderResults(); renderAnalysis();
-}
-function restoreResponse(id){
-  const r=responses.find(x=>String(x?.id)===String(id));
-  if(!r)return;
-  r.cancelled=false; delete r.cancelledAt;
-  r.updatedAt=new Date().toISOString();
-  set('v10_responses',responses);
-  renderDashboard(); renderResults(); renderAnalysis();
-}
-
-function migrateResponseLaunchIntegrity(){
-  let changed=false;
-  const groups=new Map();
-  responses.forEach((r,i)=>{
-    if(!r || responseIsCancelled(r))return;
-    const key=responseKey(r);
-    if(!groups.has(key))groups.set(key,[]);
-    groups.get(key).push({r,i});
-  });
-  groups.forEach(items=>{
-    if(items.length<=1)return;
-    items.sort((a,b)=>responseTime(a.r,a.i)-responseTime(b.r,b.i));
-    items.slice(0,-1).forEach(x=>{
-      if(!x.r.duplicate){x.r.duplicate=true;changed=true;}
-    });
-    const winner=items[items.length-1].r;
-    if(winner.duplicate){winner.duplicate=false;changed=true;}
-  });
-  if(changed)set('v10_responses',responses);
-}
-
 function analysisResponses(){
  const {cls,examId}=analysisFilterValues();
- return canonicalActiveResponses().filter(r=>{
+ let latest={};
+ responses.forEach(r=>{
+   // Uma resposta pertence à turma do aluno; a prova pode ainda ter sua própria turma.
    const student=students.find(s=>String(s.id)===String(r.studentId));
-   const exam=exams.find(e=>Number(e.id)===Number(r.examId));
-   if(!student||!exam)return false;
-   if(cls && String(student.cls||'').trim()!==String(cls).trim())return false;
-   if(examId && Number(r.examId)!==Number(examId))return false;
-   return true;
+   const exam=exams.find(e=>e.id===r.examId);
+   if(!student||!exam)return;
+   if(cls && String(student.cls||'').trim()!==String(cls).trim())return;
+   if(examId && Number(r.examId)!==Number(examId))return;
+   latest[`${r.studentId}|${r.examId}|${r.version}`]=r;
  });
+ return Object.values(latest);
 }
 
 function evaluationStats(){
@@ -3861,6 +3798,354 @@ function clearAnalysisFilters(){
 
 
 
+function reportDate(){
+ return new Date().toLocaleDateString('pt-BR');
+}
+function reportHeader(title,subtitle=''){
+ return `<h1>${esc(title)}</h1><p class="small"><b>Emissão:</b> ${reportDate()}${subtitle?`<br>${esc(subtitle)}`:''}</p>`;
+}
+function reportTable(headers,rows){
+ return `<table><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>`+
+   rows.map(r=>`<tr>${r.map(x=>`<td>${esc(x??'—')}</td>`).join('')}</tr>`).join('')+
+   `</table>`;
+}
+function pdfResultadosGerais(){
+ const st=evaluationStats();
+ const rf=resultsFilterValues();
+ const cls=rf.cls;
+ const examId=rf.examId?Number(rf.examId):'';
+ const ex=examId?exams.find(e=>Number(e.id)===Number(examId)):null;
+ const pdfResponses=st.responses.filter(r=>{
+   if(rf.studentId&&String(r.studentId)!==String(rf.studentId))return false;
+   if(examId&&Number(r.examId)!==Number(examId))return false;
+   if(cls){const ss=students.find(x=>String(x.id)===String(r.studentId));const ee=exams.find(x=>Number(x.id)===Number(r.examId));if(String(ss?.cls||ee?.cls||'').trim()!==String(cls).trim())return false;}
+   return true;
+ });
+ if(!pdfResponses.length)return alert('Não há correções para os filtros selecionados.');
+ const rows=pdfResponses.map(r=>{
+   const s=students.find(x=>String(x.id)===String(r.studentId));
+   const e=exams.find(x=>Number(x.id)===Number(r.examId));
+   const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
+   let ok=0,total=0;
+   (v?.questions||[]).forEach(qid=>{
+     const q=questions.find(q=>String(q.id)===String(qid));
+     if(!q||q.type==='discursive')return;
+     total++; if(isQuestionCorrect(r,qid,v,q))ok++;
+   });
+   return [s?.name||'Aluno não encontrado',s?.cls||e?.cls||'—',e?.name||'—',v?.letter||'—',
+     total?`${ok}/${total}`:'—',total?`${percentage(ok,total)}%`:'—'];
+ });
+ const body=reportHeader('Relatório geral de resultados',`Turma: ${cls||'Todas'} • Avaliação: ${ex?.name||'Todas'}`)+
+  `<div class="grid"><div class="kpi">Alunos avaliados<b>${st.studentsCount}</b></div>
+  <div class="kpi">Provas analisadas<b>${st.examsCount}</b></div>
+  <div class="kpi">Questões objetivas<b>${st.total}</b></div>
+  <div class="kpi">Acerto médio<b>${st.accuracy}%</b></div></div>`+
+  `<h2>Resultado por aluno</h2>`+reportTable(['Aluno','Turma','Avaliação','Versão','Acertos','Percentual'],rows);
+ printWindow(body,'Resultados gerais — Avalia+');
+}
+
+function pdfResultadoPorAluno(){
+ const id=$('studentProfileStudentSelect')?.value||'';
+ if(id){
+   return pdfPerfilAluno();
+ }
+ const st=evaluationStats();
+ if(!st.responses.length)return alert('Não há correções para emitir o relatório.');
+ const grouped=new Map();
+ st.responses.forEach(r=>{
+   const s=students.find(x=>String(x.id)===String(r.studentId));
+   if(!s)return;
+   const e=exams.find(x=>Number(x.id)===Number(r.examId));
+   const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
+   let ok=0,total=0;
+   (v?.questions||[]).forEach(qid=>{
+     const q=questions.find(q=>String(q.id)===String(qid));
+     if(!q||q.type==='discursive')return;
+     total++;if(isQuestionCorrect(r,qid,v,q))ok++;
+   });
+   const a=grouped.get(String(s.id))||{name:s.name,cls:s.cls||e?.cls||'—',tests:[],ok:0,total:0};
+   a.tests.push(`${e?.name||'Avaliação'} (${total?percentage(ok,total):0}%)`);
+   a.ok+=ok;a.total+=total;grouped.set(String(s.id),a);
+ });
+ const rows=[...grouped.values()].sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'))
+   .map(a=>[a.name,a.cls,a.tests.join(' • '),a.total?`${a.ok}/${a.total}`:'—',a.total?`${percentage(a.ok,a.total)}%`:'—']);
+ printWindow(reportHeader('Resultados consolidados por aluno')+
+   reportTable(['Aluno','Turma','Avaliações','Acertos acumulados','Média objetiva','Nível de desempenho'],rows.map(a=>a.concat([performanceLabel(a.total?percentage(a.ok,a.total):null)]))),
+   'Resultados por aluno — Avalia+');
+}
+
+function pdfAnalisePorQuestao(){
+ const st=evaluationStats();if(!st.responses.length)return alert('Não há dados para analisar.');
+ const rows=Object.values(st.qs).map((x,i)=>[
+   `Q${i+1}`,skillPresentation(x.q,exams.find(e=>e.id===x.q?.examId)).code||'Sem habilidade',skillPresentation(x.q,exams.find(e=>e.id===x.q?.examId)).descriptor||'—',x.q?.text||'',
+   `${x.ok}/${x.total}`,`${percentage(x.ok,x.total)}%`,
+   performanceLabel(percentage(x.ok,x.total))
+ ]).sort((a,b)=>parseInt(a[4])-parseInt(b[4]));
+ printWindow(reportHeader('Análise de desempenho por questão')+
+  reportTable(['Questão','Código da habilidade','Descritor / conteúdo avaliado','Enunciado','Acertos','Percentual','Status'],rows),
+  'Análise por questão — Avalia+');
+}
+
+function pdfAnalisePorHabilidade(){
+ const st=evaluationStats();if(!st.responses.length)return alert('Não há dados para analisar.');
+ const rows=Object.entries(st.sk).flatMap(([skill,x])=>{
+   const ds=Object.entries(x.descriptors||{});
+   if(!ds.length)ds.push(['—',{ok:x.ok,total:x.total}]);
+   return ds.map(([d,v])=>{const p=percentage(v.ok,v.total);return [skill,x.text||'',d,`${v.ok}/${v.total}`,`${p}%`,performanceLabel(p)];});
+ }).sort((a,b)=>parseInt(a[4])-parseInt(b[4]));
+ printWindow(reportHeader('Análise de desempenho por habilidade e descritor')+
+  reportTable(['Código da habilidade','Parte escrita da habilidade','Descritor / conteúdo avaliado','Acertos','Percentual','Classificação'],rows),
+  'Análise por habilidade — Avalia+');
+}
+
+function pdfPerfilAluno(){
+ const id=$('studentProfileStudentSelect')?.value||'';
+ if(!id)return alert('Selecione um aluno no campo "Perfil pedagógico individual" antes de emitir o PDF.');
+ const d=studentProfileData(id);if(!d)return alert('Aluno não encontrado.');
+ const s=students.find(x=>String(x.id)===String(id));
+ const rows=d.records.map(r=>[r.ex.name||'Avaliação',r.ex.date||'—',r.ver.letter||'—',`${r.ok}/${r.total}`,`${r.p}%`]);
+ const skills=d.skills.map(x=>[x.skill,`${x.ok}/${x.total}`,`${x.p}%`,performanceLabel(x.p)]);
+ let body=reportHeader(`Perfil pedagógico — ${s?.name||'Aluno'}`,`Turma: ${s?.cls||'—'}`);
+ body+=`<h2>Histórico de avaliações</h2>`+reportTable(['Avaliação','Data','Versão','Acertos','Percentual'],rows);
+ body+=`<h2>Desempenho por habilidade</h2>`+reportTable(['Código da habilidade','Acertos','Percentual','Status'],skills);
+ printWindow(body,'Perfil pedagógico — Avalia+');
+}
+
+function pdfMapaAprendizagem(){
+ const cls=$('learningMapClassSelect')?.value||$('studentProfileClassSelect')?.value||analysisFilterValues().cls;
+ if(!cls)return alert('Selecione uma turma no Mapa de aprendizagem.');
+ const map=analysisSkillRecords(cls);
+ const rows=Object.entries(map).map(([skill,exs])=>{
+   const vals=Object.values(exs).filter(v=>v.total);
+   const total=vals.reduce((n,v)=>n+v.total,0),ok=vals.reduce((n,v)=>n+v.ok,0);
+   const p=total?percentage(ok,total):0;
+   return [skill,`${ok}/${total}`,`${p}%`,performanceLabel(p)];
+ }).sort((a,b)=>parseInt(a[2])-parseInt(b[2]));
+ printWindow(reportHeader('Mapa de aprendizagem',`Turma: ${cls}`)+
+   reportTable(['Habilidade','Acertos','Percentual','Status'],rows),
+   'Mapa de aprendizagem — Avalia+');
+}
+
+function pdfAnaliseCognitiva(){
+ const cls=$('cognitiveClassSelect')?.value||analysisFilterValues().cls;
+ const agg={};
+ analysisResponses().forEach(r=>{
+   const student=students.find(x=>String(x.id)===String(r.studentId));
+   if(!student|| (cls&&String(student.cls||'').trim()!==String(cls).trim()))return;
+   const e=exams.find(x=>Number(x.id)===Number(r.examId));
+   const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
+   (v?.questions||[]).forEach(qid=>{
+     const q=questions.find(x=>String(x.id)===String(qid));
+     if(!q||q.type==='discursive')return;
+     const key=q.cognitive||'Não informado';
+     agg[key]??={ok:0,total:0};
+     agg[key].total++;if(isQuestionCorrect(r,qid,v,q))agg[key].ok++;
+   });
+ });
+ const rows=Object.entries(agg).map(([c,x])=>[c,`${x.ok}/${x.total}`,`${percentage(x.ok,x.total)}%`]);
+ if(!rows.length)return alert('Não há dados de análise cognitiva para os filtros selecionados.');
+ printWindow(reportHeader('Análise por nível cognitivo',`Turma: ${cls||'Todas'}`)+
+   reportTable(['Nível cognitivo','Acertos','Percentual'],rows),
+   'Análise cognitiva — Avalia+');
+}
+
+function pdfIntervencoes(){
+ const cls=$('learningMapClassSelect')?.value||$('cognitiveClassSelect')?.value||analysisFilterValues().cls;
+ if(!cls)return alert('Selecione uma turma para gerar as prioridades de intervenção.');
+ const map=analysisSkillRecords(cls);
+ const rows=Object.entries(map).map(([skill,exs])=>{
+   const vals=Object.values(exs).filter(v=>v.total);
+   const total=vals.reduce((n,v)=>n+v.total,0),ok=vals.reduce((n,v)=>n+v.ok,0);
+   const p=total?percentage(ok,total):0;
+   return {skill,p,total,ok};
+ }).sort((a,b)=>a.p-b.p);
+ const body=reportHeader('Prioridades de intervenção pedagógica',`Turma: ${cls}`)+
+  `<p>Critério utilizado pelo Avalia+: <b>Baixo</b> 0%–40%; <b>Intermediário</b> 41%–59%; <b>Recomendado</b> 60%–80%; <b>Avançado</b> 81%–100%.</p>`+
+  reportTable(['Prioridade','Habilidade','Acertos','Percentual'],
+    rows.map((x,i)=>[i<5?'Alta':i<10?'Média':'Baixa',x.skill,`${x.ok}/${x.total}`,`${x.p}%`]));
+ printWindow(body,'Prioridades de intervenção — Avalia+');
+}
+
+function resultsFilterValues(){
+  return {cls:$('resultsClassSelect')?.value||'',studentId:$('resultsStudentSelect')?.value||'',examId:$('resultsExamSelect')?.value||'',subject:$('resultsSubjectSelect')?.value||''};
+}
+function populateResultsFilters(){
+  const clsSel=$('resultsClassSelect'),stuSel=$('resultsStudentSelect'),exSel=$('resultsExamSelect'),subSel=$('resultsSubjectSelect');if(!clsSel||!stuSel||!exSel)return;
+  const old=resultsFilterValues();
+  const classes=[...new Set([...students.map(s=>String(s.cls||'').trim()),...exams.map(e=>String(e.cls||'').trim())])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}));
+  clsSel.innerHTML='<option value="">Todas as turmas</option>'+classes.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
+  if(classes.includes(old.cls))clsSel.value=old.cls;
+  const cls=clsSel.value;
+  const oldSubject=old.subject||'';
+  const list=students.filter(s=>!cls||String(s.cls||'').trim()===String(cls).trim()).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  stuSel.innerHTML='<option value="">Todos os alunos</option>'+list.map(st=>'<option value="'+esc(String(st.id))+'">'+esc(st.name||'Aluno')+'</option>').join('');
+  if(list.some(st=>String(st.id)===String(old.studentId)))stuSel.value=old.studentId;
+  const sid=stuSel.value;
+  const subjects=[...new Set(exams.filter(e=>{if(cls&&String(e.cls||'').trim()!==String(cls).trim())return false;if(sid&&!responses.some(r=>String(r.studentId)===String(sid)&&Number(r.examId)===Number(e.id)))return false;return true;}).map(e=>String(e.subject||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  if(subSel){ subSel.innerHTML='<option value="">Todas as disciplinas</option>'+subjects.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join(''); if(subjects.includes(oldSubject))subSel.value=oldSubject; }
+  const subject=subSel?.value||'';
+  const exs=exams.filter(e=>{if(cls&&String(e.cls||'').trim()!==String(cls).trim())return false;if(subject&&String(e.subject||'').trim()!==subject)return false;if(sid&&!responses.some(r=>String(r.studentId)===String(sid)&&Number(r.examId)===Number(e.id)))return false;return true;}).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  exSel.innerHTML='<option value="">Todas as avaliações</option>'+exs.map(e=>'<option value="'+esc(String(e.id))+'">'+esc(e.name||'Avaliação')+'</option>').join('');
+  if(exs.some(e=>String(e.id)===String(old.examId)))exSel.value=old.examId;
+}
+function clearResultsFilters(){
+  if($('resultsClassSelect'))$('resultsClassSelect').value='';
+  if($('resultsStudentSelect'))$('resultsStudentSelect').value='';
+  if($('resultsExamSelect'))$('resultsExamSelect').value='';
+  if($('resultsSubjectSelect'))$('resultsSubjectSelect').value='';
+  renderResults();
+}
+function renderResults(){
+  const box=$('resultsList');if(!box)return;
+  populateResultsFilters();
+  const f=resultsFilterValues();
+  const filtered=responses.filter(r=>{
+    if(f.studentId&&String(r.studentId)!==String(f.studentId))return false;
+    if(f.examId&&Number(r.examId)!==Number(f.examId))return false;
+    if(f.subject){const ex=exams.find(x=>Number(x.id)===Number(r.examId));if(String(ex?.subject||'').trim()!==String(f.subject).trim())return false;}
+    if(f.cls){const st=students.find(x=>String(x.id)===String(r.studentId));const ex=exams.find(x=>Number(x.id)===Number(r.examId));if(String(st?.cls||ex?.cls||'').trim()!==String(f.cls).trim())return false;}
+    return true;
+  });
+  if(!filtered.length){box.innerHTML='<div class="report-empty">Nenhuma correção encontrada para os filtros selecionados.</div>';return;}
+  const rows=[];
+  const bySkill={};
+  const questionRows=[];
+  filtered.forEach(r=>{
+    const s=students.find(x=>String(x.id)===String(r.studentId));
+    const ex=exams.find(x=>Number(x.id)===Number(r.examId));
+    const v=ex?.versions?.find(x=>String(x.letter)===String(r.version));
+    if(!s||!ex||!v)return;
+    let ok=0,total=0;
+    (v.questions||[]).forEach((qid,idx)=>{
+      const q=questions.find(x=>String(x.id)===String(qid));
+      if(!q||q.type==='discursive')return;
+      total++;const correct=isQuestionCorrect(r,qid,v,q);if(correct)ok++;
+      const m=skillPresentation(q,ex),code=m.code||'Sem habilidade',desc=m.descriptor||'Descritor não informado',key=code+'\u0000'+desc;
+      bySkill[key]??={code,desc,ok:0,total:0,text:m.text||''};bySkill[key].total++;if(correct)bySkill[key].ok++;
+      questionRows.push({number:idx+1,studentId:s.id,student:s.name||'Aluno',exam:ex.name||'Avaliação',code,text:m.text||'',desc,result:correct?'Acerto':'Erro',p:correct?100:0});
+    });
+    rows.push({studentId:s.id,student:s.name,cls:s.cls||ex.cls||'—',exam:ex.name||'Avaliação',version:v.letter,p:total?percentage(ok,total):null,ok,total});
+  });
+  const skillRows=Object.values(bySkill).map(x=>({...x,p:x.total?percentage(x.ok,x.total):0})).sort((a,b)=>a.p-b.p);
+  const fl='Turma: '+(f.cls||'Todas')+' • Aluno: '+(f.studentId?(students.find(s=>String(s.id)===String(f.studentId))?.name||'Selecionado'):'Todos')+' • Avaliação: '+(f.examId?(exams.find(e=>Number(e.id)===Number(f.examId))?.name||'Selecionada'):'Todas');
+  let html='<div class="alert ok"><b>Filtros ativos:</b> '+esc(fl)+'</div>';
+  html+='<table><tr><th>Aluno</th><th>Turma</th><th>Avaliação</th><th>Versão</th><th>Acertos</th><th>%</th><th>Nível de desempenho</th></tr>';
+  html+=rows.map(r=>'<tr><td>'+esc(r.student)+'</td><td>'+esc(r.cls)+'</td><td>'+esc(r.exam)+'</td><td>'+esc(r.version)+'</td><td>'+r.ok+'/'+r.total+'</td><td>'+(r.p==null?'—':r.p+'%')+'</td><td class="performance-status-cell">'+(r.p==null?'—':performanceBadge(r.p))+'</td></tr>').join('')+'</table>';
+  if(questionRows.length){
+    html+='<div class="card" style="margin-top:14px"><h3>📝 Resultados por questão, habilidade e descritor</h3><div style="overflow-x:auto"><table><tr><th>Questão</th><th>Aluno</th><th>Avaliação</th><th>Código da habilidade</th><th>Descritor / conteúdo avaliado</th><th>Resultado</th><th>Nível</th></tr>';
+    html+=questionRows.map(x=>'<tr><td><b>'+x.number+'</b></td><td>'+esc(x.student)+'</td><td>'+esc(x.exam)+'</td><td><b>'+esc(x.code)+'</b>'+(x.text?'<br><span class="small">'+esc(x.text)+'</span>':'')+'</td><td>'+esc(x.desc)+'</td><td>'+(x.result==='Acerto'?'✅ Acerto':'❌ Erro')+'</td><td class="performance-status-cell">'+performanceBadge(x.p)+'</td></tr>').join('');
+    html+='</table></div></div>';
+  }
+  if(skillRows.length){
+    html+='<div class="card" style="margin-top:14px"><h3>🎯 Resumo por habilidade e descritor</h3><table><tr><th>Código da habilidade</th><th>Descritor / conteúdo avaliado</th><th>Acertos</th><th>Percentual</th><th>Situação</th></tr>';
+    html+=skillRows.map(x=>'<tr><td><b>'+esc(x.code)+'</b>'+(x.text?'<br><span class="small">'+esc(x.text)+'</span>':'')+'</td><td>'+esc(x.desc)+'</td><td>'+x.ok+'/'+x.total+'</td><td>'+x.p+'%</td><td>'+performanceStatus(x.p).icon+' '+performanceLabel(x.p)+'</td></tr>').join('');
+    html+='</table></div>';
+  }
+
+  // Agrupamento pedagógico por erros em comum.
+  // A regra pedagógica é diferente do agrupamento por percentual: aqui o foco é
+  // descobrir quais habilidades/descritores/questões precisam de recomposição geral
+  // e quais alunos compartilham um conjunto de dificuldades.
+  const cohortIds=[...new Set(rows.map(r=>String(r.studentId||r.student)).filter(Boolean))];
+  const cohortSize=cohortIds.length;
+  const errorMap=new Map();
+  const studentErrors=new Map();
+  cohortIds.forEach(id=>studentErrors.set(id,new Set()));
+  questionRows.filter(x=>x.result==='Erro').forEach(x=>{
+    const sid=String(x.studentId||x.student);
+    if(!sid)return;
+    const key=[x.number,x.code||'Sem habilidade',x.desc||'Descritor não informado'].join('\u0001');
+    if(!errorMap.has(key)) errorMap.set(key,{key,number:x.number,code:x.code||'Sem habilidade',desc:x.desc||'Descritor não informado',students:new Set(),text:x.text||''});
+    errorMap.get(key).students.add(sid);
+    if(!studentErrors.has(sid))studentErrors.set(sid,new Set());
+    studentErrors.get(sid).add(key);
+  });
+  const errorItems=[...errorMap.values()].map(e=>({...e,count:e.students.size,p:cohortSize?Math.round(e.students.size/cohortSize*100):0})).sort((a,b)=>b.count-a.count||a.number-b.number);
+  const generalRecomposition=errorItems.filter(e=>cohortSize>0 && e.count===cohortSize);
+
+  // Cria grupos a partir das interseções de erros entre pares de alunos.
+  // Assim, alunos com dificuldades em comum são reunidos mesmo que tenham
+  // outras dificuldades diferentes. Grupos podem se sobrepor pedagogicamente.
+  const pairGroups=new Map();
+  for(let i=0;i<cohortIds.length;i++){
+    for(let j=i+1;j<cohortIds.length;j++){
+      const a=studentErrors.get(cohortIds[i])||new Set(), b=studentErrors.get(cohortIds[j])||new Set();
+      const common=[...a].filter(k=>b.has(k)).sort();
+      if(!common.length)continue;
+      const sig=common.join('\u0002');
+      if(!pairGroups.has(sig))pairGroups.set(sig,{errors:common,students:new Set()});
+      pairGroups.get(sig).students.add(cohortIds[i]);
+      pairGroups.get(sig).students.add(cohortIds[j]);
+    }
+  }
+  // Adiciona grupos de 3+ alunos quando compartilham exatamente o mesmo conjunto
+  // de erros, sem depender apenas de pares.
+  const exactGroups=new Map();
+  studentErrors.forEach((set,sid)=>{
+    const sig=[...set].sort().join('\u0002');
+    if(!sig)return;
+    if(!exactGroups.has(sig))exactGroups.set(sig,{errors:[...set].sort(),students:new Set()});
+    exactGroups.get(sig).students.add(sid);
+  });
+  exactGroups.forEach((g,sig)=>{
+    if(g.students.size>=2){
+      if(!pairGroups.has(sig))pairGroups.set(sig,g);
+      else g.students.forEach(sid=>pairGroups.get(sig).students.add(sid));
+    }
+  });
+  const interventionErrorGroups=[...pairGroups.values()]
+    .map(g=>({errors:g.errors,students:[...g.students],count:g.students.size}))
+    .filter(g=>g.count>=2)
+    .sort((a,b)=>b.count-a.count||b.errors.length-a.errors.length)
+    .slice(0,12);
+
+  const errorLabel=(key)=>{
+    const e=errorMap.get(key);
+    return e?`Q${e.number} — ${e.code} — ${e.desc}`:key;
+  };
+  const studentName=(sid)=>{
+    const s=students.find(x=>String(x.id)===String(sid));
+    return s?.name||sid;
+  };
+
+  html+='<div class="card" style="margin-top:14px"><h3>🧩 Recomposição e grupos de intervenção por erros em comum</h3>'+
+    '<p class="small">Este agrupamento não usa apenas o percentual do aluno. Ele identifica <b>habilidades, descritores e questões que foram erradas</b> e reúne alunos que apresentam dificuldades em comum. Um aluno pode participar de mais de um grupo quando possui dificuldades diferentes.</p>';
+
+  html+='<div class="intervention-item critical" style="margin-bottom:12px"><h4 style="margin:0 0 6px">🔴 Recomposição geral</h4>'+
+    '<p class="small">Conteúdos/habilidades que <b>todos os alunos do recorte atual erraram</b>. Devem ser retomados com a turma antes das intervenções específicas.</p>';
+  if(generalRecomposition.length){
+    html+='<div style="overflow-x:auto"><table><tr><th>Questão</th><th>Habilidade</th><th>Descritor / conteúdo</th><th>Alunos</th><th>Prioridade</th></tr>'+
+      generalRecomposition.map(e=>`<tr><td><b>Q${e.number}</b></td><td><b>${esc(e.code)}</b></td><td>${esc(e.desc)}</td><td>${e.count}/${cohortSize} (100%)</td><td>🔴 Retomação geral</td></tr>`).join('')+
+      '</table></div>';
+  }else{
+    html+='<div class="report-empty">Não há erro comum a 100% dos alunos no recorte atual.</div>';
+  }
+  html+='</div>';
+
+  html+='<div class="intervention-item warning" style="margin-bottom:12px"><h4 style="margin:0 0 6px">🟠 Grupos de intervenção por erros em comum</h4>'+
+    '<p class="small">Os grupos abaixo compartilham duas ou mais dificuldades em comum quando possível. O planejamento da intervenção deve trabalhar exatamente essas habilidades/descritores.</p>';
+  if(interventionErrorGroups.length){
+    interventionErrorGroups.forEach((g,i)=>{
+      const commonItems=g.errors.map(errorLabel);
+      html+=`<div class="card" style="margin:10px 0;background:#fffaf0"><h4 style="margin:0 0 8px">Grupo ${i+1} — ${g.count} aluno(s)</h4>`+
+        `<p><b>Alunos:</b> ${g.students.map(studentName).map(esc).join(', ')}</p>`+
+        `<p><b>Erros em comum:</b></p><ul>${commonItems.map(x=>'<li>'+esc(x)+'</li>').join('')}</ul>`+
+        `<p class="small"><b>Encaminhamento:</b> formar grupo temporário para retomada dessas habilidades/descritores, com atividade específica e nova verificação.</p></div>`;
+    });
+  }else{
+    html+='<div class="report-empty">Não foram identificados grupos com erros em comum entre pelo menos dois alunos.</div>';
+  }
+  html+='</div>';
+
+  html+='<div class="intervention-item good"><h4 style="margin:0 0 6px">🟡 Mapa das dificuldades por habilidade/descritor</h4>'+
+    '<div style="overflow-x:auto"><table><tr><th>Habilidade</th><th>Descritor / conteúdo</th><th>Alunos com erro</th><th>Percentual da turma</th><th>Encaminhamento</th></tr>'+
+    errorItems.map(e=>`<tr><td><b>${esc(e.code)}</b></td><td>${esc(e.desc)}</td><td>${e.count}/${cohortSize}</td><td><b>${e.p}%</b></td><td>${e.p===100?'🔴 Recomposição geral':e.p>=60?'🟠 Prioridade alta':e.p>=30?'🟡 Intervenção em grupo':'🟢 Acompanhamento específico'}</td></tr>`).join('')+
+    '</table></div></div>';
+  html+='</div>';
+
+  box.innerHTML=html;
+}
+
 function profileStudentsForClass(cls){
  return students.filter(s=>!cls || String(s.cls||'').trim()===String(cls).trim());
 }
@@ -3891,7 +4176,7 @@ function populateStudentProfileSelect(){
 function studentProfileData(studentId){
  const student=students.find(s=>String(s.id)===String(studentId));
  if(!student)return null;
- const records=canonicalActiveResponses().filter(r=>String(r.studentId)===String(studentId)).map(r=>{
+ const records=responses.filter(r=>String(r.studentId)===String(studentId)).map(r=>{
    const ex=exams.find(e=>Number(e.id)===Number(r.examId));
    const ver=ex?.versions?.find(v=>String(v.letter)===String(r.version));
    if(!ex||!ver)return null;
@@ -4133,7 +4418,7 @@ function curriculumAssessmentData(className,subject,code,descriptor){
  return totals;
 }
 function curriculumPlanningData(classId,subject,code){
- const plans=[...(get('v10_plans',[])||[]),...(get('v10_ai_plans',[])||[]),...(get('v10_lesson_plans',[])||[])].filter(Boolean);
+ const plans=[...(get('v10_plans',[])||[]),...(get('v10_ai_plans',[])||[])].filter(Boolean);
  return plans.filter(p=>{
    const s=p.skill||{};
    return String(s.classId||'')===String(classId) && normalizeClassName(s.subject||subject)===normalizeClassName(subject) && String(s.code||'').trim().toUpperCase()===String(code).trim().toUpperCase();
@@ -4490,295 +4775,6 @@ function renderAnalysis(){
  </div>`;
 }
 
-
-function reportDate(){
- return new Date().toLocaleDateString('pt-BR');
-}
-function reportHeader(title,subtitle=''){
- return `<h1>${esc(title)}</h1><p class="small"><b>Emissão:</b> ${reportDate()}${subtitle?`<br>${esc(subtitle)}`:''}</p>`;
-}
-function reportTable(headers,rows){
- return `<table><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>`+
-   rows.map(r=>`<tr>${r.map(x=>`<td>${esc(x??'—')}</td>`).join('')}</tr>`).join('')+
-   `</table>`;
-}
-function pdfResultadosGerais(){
- const st=evaluationStats();
- const rf=resultsFilterValues();
- const cls=rf.cls;
- const examId=rf.examId?Number(rf.examId):'';
- const ex=examId?exams.find(e=>Number(e.id)===Number(examId)):null;
- const pdfResponses=st.responses.filter(r=>{
-   if(rf.studentId&&String(r.studentId)!==String(rf.studentId))return false;
-   if(examId&&Number(r.examId)!==Number(examId))return false;
-   if(cls){const ss=students.find(x=>String(x.id)===String(r.studentId));const ee=exams.find(x=>Number(x.id)===Number(r.examId));if(String(ss?.cls||ee?.cls||'').trim()!==String(cls).trim())return false;}
-   return true;
- });
- if(!pdfResponses.length)return alert('Não há correções para os filtros selecionados.');
- const rows=pdfResponses.map(r=>{
-   const s=students.find(x=>String(x.id)===String(r.studentId));
-   const e=exams.find(x=>Number(x.id)===Number(r.examId));
-   const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
-   let ok=0,total=0;
-   (v?.questions||[]).forEach(qid=>{
-     const q=questions.find(q=>String(q.id)===String(qid));
-     if(!q||q.type==='discursive')return;
-     total++; if(isQuestionCorrect(r,qid,v,q))ok++;
-   });
-   return [s?.name||'Aluno não encontrado',s?.cls||e?.cls||'—',e?.name||'—',v?.letter||'—',
-     total?`${ok}/${total}`:'—',total?`${percentage(ok,total)}%`:'—'];
- });
- const body=reportHeader('Relatório geral de resultados',`Turma: ${cls||'Todas'} • Avaliação: ${ex?.name||'Todas'}`)+
-  `<div class="grid"><div class="kpi">Alunos avaliados<b>${st.studentsCount}</b></div>
-  <div class="kpi">Provas analisadas<b>${st.examsCount}</b></div>
-  <div class="kpi">Questões objetivas<b>${st.total}</b></div>
-  <div class="kpi">Acerto médio<b>${st.accuracy}%</b></div></div>`+
-  `<h2>Resultado por aluno</h2>`+reportTable(['Aluno','Turma','Avaliação','Versão','Acertos','Percentual'],rows);
- printWindow(body,'Resultados gerais — Avalia+');
-}
-
-function pdfResultadoPorAluno(){
- const id=$('studentProfileStudentSelect')?.value||'';
- if(id){
-   return pdfPerfilAluno();
- }
- const st=evaluationStats();
- if(!st.responses.length)return alert('Não há correções para emitir o relatório.');
- const grouped=new Map();
- st.responses.forEach(r=>{
-   const s=students.find(x=>String(x.id)===String(r.studentId));
-   if(!s)return;
-   const e=exams.find(x=>Number(x.id)===Number(r.examId));
-   const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
-   let ok=0,total=0;
-   (v?.questions||[]).forEach(qid=>{
-     const q=questions.find(q=>String(q.id)===String(qid));
-     if(!q||q.type==='discursive')return;
-     total++;if(isQuestionCorrect(r,qid,v,q))ok++;
-   });
-   const a=grouped.get(String(s.id))||{name:s.name,cls:s.cls||e?.cls||'—',tests:[],ok:0,total:0};
-   a.tests.push(`${e?.name||'Avaliação'} (${total?percentage(ok,total):0}%)`);
-   a.ok+=ok;a.total+=total;grouped.set(String(s.id),a);
- });
- const rows=[...grouped.values()].sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'))
-   .map(a=>[a.name,a.cls,a.tests.join(' • '),a.total?`${a.ok}/${a.total}`:'—',a.total?`${percentage(a.ok,a.total)}%`:'—']);
- printWindow(reportHeader('Resultados consolidados por aluno')+
-   reportTable(['Aluno','Turma','Avaliações','Acertos acumulados','Média objetiva','Nível de desempenho'],rows.map(a=>a.concat([performanceLabel(a.total?percentage(a.ok,a.total):null)]))),
-   'Resultados por aluno — Avalia+');
-}
-
-function pdfAnalisePorQuestao(){
- const st=evaluationStats();if(!st.responses.length)return alert('Não há dados para analisar.');
- const rows=Object.values(st.qs).map((x,i)=>[
-   `Q${i+1}`,skillPresentation(x.q,exams.find(e=>e.id===x.q?.examId)).code||'Sem habilidade',skillPresentation(x.q,exams.find(e=>e.id===x.q?.examId)).descriptor||'—',x.q?.text||'',
-   `${x.ok}/${x.total}`,`${percentage(x.ok,x.total)}%`,
-   performanceLabel(percentage(x.ok,x.total))
- ]).sort((a,b)=>parseInt(a[4])-parseInt(b[4]));
- printWindow(reportHeader('Análise de desempenho por questão')+
-  reportTable(['Questão','Código da habilidade','Descritor / conteúdo avaliado','Enunciado','Acertos','Percentual','Status'],rows),
-  'Análise por questão — Avalia+');
-}
-
-function pdfAnalisePorHabilidade(){
- const st=evaluationStats();if(!st.responses.length)return alert('Não há dados para analisar.');
- const rows=Object.entries(st.sk).flatMap(([skill,x])=>{
-   const ds=Object.entries(x.descriptors||{});
-   if(!ds.length)ds.push(['—',{ok:x.ok,total:x.total}]);
-   return ds.map(([d,v])=>{const p=percentage(v.ok,v.total);return [skill,x.text||'',d,`${v.ok}/${v.total}`,`${p}%`,performanceLabel(p)];});
- }).sort((a,b)=>parseInt(a[4])-parseInt(b[4]));
- printWindow(reportHeader('Análise de desempenho por habilidade e descritor')+
-  reportTable(['Código da habilidade','Parte escrita da habilidade','Descritor / conteúdo avaliado','Acertos','Percentual','Classificação'],rows),
-  'Análise por habilidade — Avalia+');
-}
-
-function pdfPerfilAluno(){
- const id=$('studentProfileStudentSelect')?.value||'';
- if(!id)return alert('Selecione um aluno no campo "Perfil pedagógico individual" antes de emitir o PDF.');
- const d=studentProfileData(id);if(!d)return alert('Aluno não encontrado.');
- const s=students.find(x=>String(x.id)===String(id));
- const rows=d.records.map(r=>[r.ex.name||'Avaliação',r.ex.date||'—',r.ver.letter||'—',`${r.ok}/${r.total}`,`${r.p}%`]);
- const skills=d.skills.map(x=>[x.skill,`${x.ok}/${x.total}`,`${x.p}%`,performanceLabel(x.p)]);
- let body=reportHeader(`Perfil pedagógico — ${s?.name||'Aluno'}`,`Turma: ${s?.cls||'—'}`);
- body+=`<h2>Histórico de avaliações</h2>`+reportTable(['Avaliação','Data','Versão','Acertos','Percentual'],rows);
- body+=`<h2>Desempenho por habilidade</h2>`+reportTable(['Código da habilidade','Acertos','Percentual','Status'],skills);
- printWindow(body,'Perfil pedagógico — Avalia+');
-}
-
-function pdfMapaAprendizagem(){
- const cls=$('learningMapClassSelect')?.value||$('studentProfileClassSelect')?.value||analysisFilterValues().cls;
- if(!cls)return alert('Selecione uma turma no Mapa de aprendizagem.');
- const map=analysisSkillRecords(cls);
- const rows=Object.entries(map).map(([skill,exs])=>{
-   const vals=Object.values(exs).filter(v=>v.total);
-   const total=vals.reduce((n,v)=>n+v.total,0),ok=vals.reduce((n,v)=>n+v.ok,0);
-   const p=total?percentage(ok,total):0;
-   return [skill,`${ok}/${total}`,`${p}%`,performanceLabel(p)];
- }).sort((a,b)=>parseInt(a[2])-parseInt(b[2]));
- printWindow(reportHeader('Mapa de aprendizagem',`Turma: ${cls}`)+
-   reportTable(['Habilidade','Acertos','Percentual','Status'],rows),
-   'Mapa de aprendizagem — Avalia+');
-}
-
-function pdfAnaliseCognitiva(){
- const cls=$('cognitiveClassSelect')?.value||analysisFilterValues().cls;
- const agg={};
- analysisResponses().forEach(r=>{
-   const student=students.find(x=>String(x.id)===String(r.studentId));
-   if(!student|| (cls&&String(student.cls||'').trim()!==String(cls).trim()))return;
-   const e=exams.find(x=>Number(x.id)===Number(r.examId));
-   const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
-   (v?.questions||[]).forEach(qid=>{
-     const q=questions.find(x=>String(x.id)===String(qid));
-     if(!q||q.type==='discursive')return;
-     const key=q.cognitive||'Não informado';
-     agg[key]??={ok:0,total:0};
-     agg[key].total++;if(isQuestionCorrect(r,qid,v,q))agg[key].ok++;
-   });
- });
- const rows=Object.entries(agg).map(([c,x])=>[c,`${x.ok}/${x.total}`,`${percentage(x.ok,x.total)}%`]);
- if(!rows.length)return alert('Não há dados de análise cognitiva para os filtros selecionados.');
- printWindow(reportHeader('Análise por nível cognitivo',`Turma: ${cls||'Todas'}`)+
-   reportTable(['Nível cognitivo','Acertos','Percentual'],rows),
-   'Análise cognitiva — Avalia+');
-}
-
-function pdfIntervencoes(){
- const cls=$('learningMapClassSelect')?.value||$('cognitiveClassSelect')?.value||analysisFilterValues().cls;
- if(!cls)return alert('Selecione uma turma para gerar as prioridades de intervenção.');
- const map=analysisSkillRecords(cls);
- const rows=Object.entries(map).map(([skill,exs])=>{
-   const vals=Object.values(exs).filter(v=>v.total);
-   const total=vals.reduce((n,v)=>n+v.total,0),ok=vals.reduce((n,v)=>n+v.ok,0);
-   const p=total?percentage(ok,total):0;
-   return {skill,p,total,ok};
- }).sort((a,b)=>a.p-b.p);
- const body=reportHeader('Prioridades de intervenção pedagógica',`Turma: ${cls}`)+
-  `<p>Critério utilizado pelo Avalia+: <b>Baixo</b> 0%–40%; <b>Intermediário</b> 41%–59%; <b>Recomendado</b> 60%–80%; <b>Avançado</b> 81%–100%.</p>`+
-  reportTable(['Prioridade','Habilidade','Acertos','Percentual'],
-    rows.map((x,i)=>[i<5?'Alta':i<10?'Média':'Baixa',x.skill,`${x.ok}/${x.total}`,`${x.p}%`]));
- printWindow(body,'Prioridades de intervenção — Avalia+');
-}
-
-function resultsFilterValues(){
-  return {cls:$('resultsClassSelect')?.value||'',studentId:$('resultsStudentSelect')?.value||'',examId:$('resultsExamSelect')?.value||'',subject:$('resultsSubjectSelect')?.value||''};
-}
-function populateResultsFilters(){
-  const clsSel=$('resultsClassSelect'),stuSel=$('resultsStudentSelect'),exSel=$('resultsExamSelect'),subSel=$('resultsSubjectSelect');if(!clsSel||!stuSel||!exSel)return;
-  const old=resultsFilterValues();
-  const classes=[...new Set([...students.map(s=>String(s.cls||'').trim()),...exams.map(e=>String(e.cls||'').trim())])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}));
-  clsSel.innerHTML='<option value="">Todas as turmas</option>'+classes.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
-  if(classes.includes(old.cls))clsSel.value=old.cls;
-  const cls=clsSel.value;
-  const oldSubject=old.subject||'';
-  const list=students.filter(s=>!cls||String(s.cls||'').trim()===String(cls).trim()).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
-  stuSel.innerHTML='<option value="">Todos os alunos</option>'+list.map(st=>'<option value="'+esc(String(st.id))+'">'+esc(st.name||'Aluno')+'</option>').join('');
-  if(list.some(st=>String(st.id)===String(old.studentId)))stuSel.value=old.studentId;
-  const sid=stuSel.value;
-  const subjects=[...new Set(exams.filter(e=>{if(cls&&String(e.cls||'').trim()!==String(cls).trim())return false;if(sid&&!responses.some(r=>String(r.studentId)===String(sid)&&Number(r.examId)===Number(e.id)))return false;return true;}).map(e=>String(e.subject||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  if(subSel){ subSel.innerHTML='<option value="">Todas as disciplinas</option>'+subjects.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join(''); if(subjects.includes(oldSubject))subSel.value=oldSubject; }
-  const subject=subSel?.value||'';
-  const exs=exams.filter(e=>{if(cls&&String(e.cls||'').trim()!==String(cls).trim())return false;if(subject&&String(e.subject||'').trim()!==subject)return false;if(sid&&!responses.some(r=>String(r.studentId)===String(sid)&&Number(r.examId)===Number(e.id)))return false;return true;}).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
-  exSel.innerHTML='<option value="">Todas as avaliações</option>'+exs.map(e=>'<option value="'+esc(String(e.id))+'">'+esc(e.name||'Avaliação')+'</option>').join('');
-  if(exs.some(e=>String(e.id)===String(old.examId)))exSel.value=old.examId;
-}
-function clearResultsFilters(){
-  if($('resultsClassSelect'))$('resultsClassSelect').value='';
-  if($('resultsStudentSelect'))$('resultsStudentSelect').value='';
-  if($('resultsExamSelect'))$('resultsExamSelect').value='';
-  if($('resultsSubjectSelect'))$('resultsSubjectSelect').value='';
-  renderResults();
-}
-function renderResults(){
-  migrateResponseLaunchIntegrity();
-  const box=$('resultsList');if(!box)return;
-  populateResultsFilters();
-  const f=resultsFilterValues();
-  // A lista principal mostra somente lançamentos ativos/canônicos.
-  // Cancelados permanecem no banco para auditoria, mas não aparecem aqui.
-  const filtered=canonicalActiveResponses().filter(r=>{
-    if(f.studentId&&String(r.studentId)!==String(f.studentId))return false;
-    if(f.examId&&Number(r.examId)!==Number(f.examId))return false;
-    if(f.subject){const ex=exams.find(x=>Number(x.id)===Number(r.examId));if(String(ex?.subject||'').trim()!==String(f.subject).trim())return false;}
-    if(f.cls){const st=students.find(x=>String(x.id)===String(r.studentId));const ex=exams.find(x=>Number(x.id)===Number(r.examId));if(String(st?.cls||ex?.cls||'').trim()!==String(f.cls).trim())return false;}
-    return true;
-  });
-  if(!filtered.length){box.innerHTML='<div class="report-empty">Nenhuma correção ativa encontrada para os filtros selecionados.</div>';return;}
-  const rows=[];
-  const bySkill={};
-  const questionRows=[];
-  filtered.forEach(r=>{
-    const s=students.find(x=>String(x.id)===String(r.studentId));
-    const ex=exams.find(x=>Number(x.id)===Number(r.examId));
-    const v=ex?.versions?.find(x=>String(x.letter)===String(r.version));
-    if(!s||!ex||!v)return;
-    let ok=0,total=0;
-    (v.questions||[]).forEach((qid,idx)=>{
-      const q=questions.find(x=>String(x.id)===String(qid));
-      if(!q||q.type==='discursive')return;
-      total++;const correct=isQuestionCorrect(r,qid,v,q);if(correct)ok++;
-      const m=skillPresentation(q,ex),code=m.code||'Sem habilidade',desc=m.descriptor||'Descritor não informado',key=code+'\u0000'+desc;
-      bySkill[key]??={code,desc,ok:0,total:0,text:m.text||''};bySkill[key].total++;if(correct)bySkill[key].ok++;
-      questionRows.push({number:idx+1,studentId:s.id,student:s.name||'Aluno',exam:ex.name||'Avaliação',code,text:m.text||'',desc,result:correct?'Acerto':'Erro',p:correct?100:0});
-    });
-    rows.push({id:r.id,studentId:s.id,student:s.name,cls:s.cls||ex.cls||'—',exam:ex.name||'Avaliação',version:v.letter,p:total?percentage(ok,total):null,ok,total,active:true,canonical:true,launchCount:responseLaunchCount(r.studentId,r.examId),updatedAt:r.updatedAt||''});
-  });
-
-  // Ordem alfabética do aluno; em empate, avaliação e versão.
-  rows.sort((a,b)=>String(a.student||'').localeCompare(String(b.student||''),'pt-BR',{sensitivity:'base'})||
-                    String(a.exam||'').localeCompare(String(b.exam||''),'pt-BR',{sensitivity:'base'})||
-                    String(a.version||'').localeCompare(String(b.version||''),'pt-BR'));
-
-  const skillRows=Object.values(bySkill).map(x=>({...x,p:x.total?percentage(x.ok,x.total):0})).sort((a,b)=>a.p-b.p);
-  const fl='Turma: '+(f.cls||'Todas')+' • Aluno: '+(f.studentId?(students.find(s=>String(s.id)===String(f.studentId))?.name||'Selecionado'):'Todos')+' • Avaliação: '+(f.examId?(exams.find(e=>Number(e.id)===Number(f.examId))?.name||'Selecionada'):'Todas');
-  let html='<div class="alert ok"><b>Filtros ativos:</b> '+esc(fl)+'</div>';
-  html+='<table><tr><th>Aluno</th><th>Turma</th><th>Avaliação</th><th>Versão</th><th>Acertos</th><th>%</th><th>Nível</th><th>Lançamento</th><th>Ação</th></tr>';
-  html+=rows.map(r=>{
-    const action=`<button class="secondary" type="button" onclick="editResult('${esc(String(r.id))}')">✏️ Editar gabarito</button> <button class="secondary" type="button" onclick="cancelResponse('${esc(String(r.id))}')">↩️ Cancelar</button>`;
-    const badge=r.launchCount>1?` <span class="small">(${r.launchCount} lançamentos históricos)</span>`:'';
-    return '<tr><td>'+esc(r.student)+'</td><td>'+esc(r.cls)+'</td><td>'+esc(r.exam)+'</td><td>'+esc(r.version)+'</td><td>'+r.ok+'/'+r.total+'</td><td>'+(r.p==null?'—':r.p+'%')+'</td><td class="performance-status-cell">'+(r.p==null?'—':performanceBadge(r.p))+'</td><td>🟢 Ativo'+badge+'</td><td>'+action+'</td></tr>';
-  }).join('')+'</table>';
-  if(questionRows.length){
-    html+='<div class="card" style="margin-top:14px"><h3>📝 Resultados por questão, habilidade e descritor</h3><div style="overflow-x:auto"><table><tr><th>Questão</th><th>Aluno</th><th>Avaliação</th><th>Código da habilidade</th><th>Descritor / conteúdo avaliado</th><th>Resultado</th><th>Nível</th></tr>';
-    html+=questionRows.map(x=>'<tr><td><b>'+x.number+'</b></td><td>'+esc(x.student)+'</td><td>'+esc(x.exam)+'</td><td><b>'+esc(x.code)+'</b>'+(x.text?'<br><span class="small">'+esc(x.text)+'</span>':'')+'</td><td>'+esc(x.desc)+'</td><td>'+(x.result==='Acerto'?'✅ Acerto':'❌ Erro')+'</td><td class="performance-status-cell">'+performanceBadge(x.p)+'</td></tr>').join('');
-    html+='</table></div></div>';
-  }
-  if(skillRows.length){
-    html+='<div class="card" style="margin-top:14px"><h3>🎯 Resumo por habilidade e descritor</h3><table><tr><th>Código da habilidade</th><th>Descritor / conteúdo avaliado</th><th>Acertos</th><th>Percentual</th><th>Situação</th></tr>';
-    html+=skillRows.map(x=>'<tr><td><b>'+esc(x.code)+'</b>'+(x.text?'<br><span class="small">'+esc(x.text)+'</span>':'')+'</td><td>'+esc(x.desc)+'</td><td>'+x.ok+'/'+x.total+'</td><td>'+x.p+'%</td><td>'+performanceStatus(x.p).icon+' '+performanceLabel(x.p)+'</td></tr>').join('');
-    html+='</table></div>';
-  }
-
-  const cohortIds=[...new Set(rows.map(r=>String(r.studentId||r.student)).filter(Boolean))];
-  const cohortSize=cohortIds.length;
-  const errorMap=new Map();
-  const studentErrors=new Map();
-  cohortIds.forEach(id=>studentErrors.set(id,new Set()));
-  questionRows.filter(x=>x.result==='Erro').forEach(x=>{
-    const sid=String(x.studentId||x.student); if(!sid)return;
-    const key=[x.number,x.code||'Sem habilidade',x.desc||'Descritor não informado'].join('\u0001');
-    if(!errorMap.has(key))errorMap.set(key,{key,number:x.number,code:x.code||'Sem habilidade',desc:x.desc||'Descritor não informado',students:new Set(),text:x.text||''});
-    errorMap.get(key).students.add(sid);
-    if(!studentErrors.has(sid))studentErrors.set(sid,new Set());
-    studentErrors.get(sid).add(key);
-  });
-  const commonErrors=[...errorMap.values()].map(x=>({...x,count:x.students.size,p:cohortSize?Math.round(x.students.size/cohortSize*100):0})).sort((a,b)=>b.p-a.p||b.count-a.count);
-  const interventionGroups=[];
-  const unassigned=new Set(cohortIds);
-  [...studentErrors.entries()].forEach(([sid,errs])=>{
-    if(!errs.size)return;
-    const overlap=interventionGroups.find(g=>{let inter=0;errs.forEach(k=>{if(g.errors.has(k))inter++});return inter>=Math.max(1,Math.ceil(Math.min(errs.size,g.errors.size)*0.5))});
-    if(overlap){overlap.students.add(sid);errs.forEach(k=>overlap.errors.add(k));unassigned.delete(sid);}
-    else interventionGroups.push({students:new Set([sid]),errors:new Set(errs)});
-  });
-  interventionGroups.forEach(g=>{g.size=g.students.size;g.errorsCount=g.errors.size;});
-  if(commonErrors.length){
-    html+='<div class="card" style="margin-top:14px"><h3>🎯 O que precisa ser ensinado/retomado</h3><p class="small">Critério: mais de 40% de erros no conjunto de alunos avaliados da turma (equivale a menos de 60% de acertos).</p><div class="results-intervention-group"><table><tr><th>Questão</th><th>Habilidade</th><th>Descritor / conteúdo</th><th>Erros</th><th>Alunos afetados</th></tr>';
-    html+=commonErrors.filter(x=>x.p>40).slice(0,10).map(x=>`<tr><td><b>Q${x.number}</b></td><td><b>${esc(x.code)}</b>${x.text?`<br><span class="small">${esc(x.text)}</span>`:''}</td><td>${esc(x.desc)}</td><td>${x.p}%</td><td>${x.count}/${cohortSize}</td></tr>`).join('')||'<tr><td colspan="5">Nenhuma prioridade coletiva acima de 40% de erros.</td></tr>';
-    html+='</table></div></div>';
-  }
-  box.innerHTML=html;
-}
-
 function exportCurrentAnalysis(){
  const st=evaluationStats(),{cls,examId}=analysisFilterValues(),exam=examId?exams.find(e=>e.id===Number(examId)):null;
  const title=`Análise de desempenho — ${cls||'Todas as turmas'} — ${exam?.name||'Todas as provas'}`;
@@ -4791,53 +4787,8 @@ function exportCurrentAnalysis(){
  printWindow(body,'Análise de desempenho');
 }
 
-function editResult(id){
-  const r=responses.find(x=>String(x?.id)===String(id));
-  if(!r)return alert('Lançamento não encontrado.');
-  if(responseIsCancelled(r))return alert('Este lançamento está cancelado e não pode ser editado.');
-  const canonical=canonicalActiveResponses().some(x=>String(x.id)===String(r.id));
-  if(!canonical)return alert('Este lançamento não é o ativo da avaliação. Edite o lançamento ativo.');
-  const e=exams.find(x=>Number(x.id)===Number(r.examId));
-  const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
-  const s=students.find(x=>String(x.id)===String(r.studentId));
-  if(!e||!v)return alert('Avaliação ou versão não encontrada.');
-  const objective=v.questions.map((qid,i)=>({qid,i,q:questions.find(x=>String(x.id)===String(qid))})).filter(x=>x.q&&x.q.type!=='discursive');
-  const modalBox=document.getElementById('apModalBox');
-  const modalEl=document.getElementById('apModal');
-  if(!modalBox||!modalEl){
-    // Fallback para ambientes sem o modal do módulo Acompanhamento.
-    v.questions.forEach((qid,i)=>{const q=questions.find(x=>String(x.id)===String(qid));if(!q||q.type==='discursive')return;const a=prompt(`Q${i+1} — ${q.text||''}\nResposta atual: ${r.answers?.[qid]||'—'}\nNova resposta A/B/C/D/E (vazio = não marcada):`,r.answers?.[qid]||'');if(a!==null&&(/^[ABCDE]$/i.test(a.trim())||a.trim()===''))r.answers[qid]=a.trim().toUpperCase();});
-    r.updatedAt=new Date().toISOString();set('v10_responses',responses);renderDashboard();renderResults();renderAnalysis();return;
-  }
-  const escA=typeof esc==='function'?esc:(x)=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  modalBox.innerHTML=`<div class="toolbar" style="justify-content:space-between;align-items:flex-start;gap:12px"><div><h2 style="margin:0">✏️ Editar gabarito lançado</h2><div class="small" style="margin-top:5px"><b>Aluno:</b> ${escA(s?.name||'Aluno')} • <b>Avaliação:</b> ${escA(e.name||'Avaliação')} • <b>Versão:</b> ${escA(v.letter)}</div></div><button class="secondary" type="button" onclick="AP.close()">✕ Fechar</button></div>
-  <div class="alert warn" style="margin-top:12px"><b>Atenção:</b> altere somente as respostas lançadas. O sistema recalculará automaticamente os acertos, percentual, nível, habilidades e demais indicadores.</div>
-  <div class="manual-key-grid" style="margin-top:12px">${objective.map(x=>{const ans=normalizeAnswer(r.answers?.[x.qid]||'');return `<div class="manual-q"><b>Q${x.i+1}</b><div class="qmeta">${escA((x.q.text||'').slice(0,180))}</div><label>Resposta lançada</label><select id="editResp_${x.i}"><option value="">— não marcada —</option>${['A','B','C','D','E'].map(a=>`<option value="${a}" ${ans===a?'selected':''}>${a}</option>`).join('')}</select></div>`}).join('')}</div>
-  <div class="toolbar" style="margin-top:16px"><button type="button" onclick="saveEditedResponse('${escA(String(r.id))}')">💾 Salvar alterações</button><button class="secondary" type="button" onclick="AP.close()">Cancelar</button></div>`;
-  modalEl.classList.add('open');
-  modalEl.setAttribute('aria-hidden','false');
-}
-function saveEditedResponse(id){
-  const r=responses.find(x=>String(x?.id)===String(id));
-  if(!r)return alert('Lançamento não encontrado.');
-  const e=exams.find(x=>Number(x.id)===Number(r.examId));
-  const v=e?.versions?.find(x=>String(x.letter)===String(r.version));
-  if(!v)return alert('Avaliação ou versão não encontrada.');
-  v.questions.forEach((qid,i)=>{
-    const q=questions.find(x=>String(x.id)===String(qid));
-    if(!q||q.type==='discursive')return;
-    const el=$('editResp_'+i);
-    if(el)r.answers[qid]=el.value||'';
-  });
-  r.updatedAt=new Date().toISOString();
-  r.editedAt=new Date().toISOString();
-  r.source=r.source||'manual';
-  set('v10_responses',responses);
-  if(typeof AP!=='undefined'&&AP&&typeof AP.close==='function')AP.close();
-  renderDashboard();renderResults();renderAnalysis();
-  alert('✅ Gabarito atualizado. Os resultados foram recalculados.');
-}
-function delResult(id){cancelResponse(id);}
+function editResult(id){let r=responses.find(x=>x.id===id);if(!r)return;let e=exams.find(x=>x.id===r.examId),v=e?.versions.find(x=>x.letter===r.version);v?.questions.forEach((qid,i)=>{let q=questions.find(x=>x.id===qid),a=prompt(`Q${i+1} — ${q?.text}\nResposta atual: ${r.answers[qid]}\nNova resposta A/B/C/D/E:`,r.answers[qid]);if(a&&/^[ABCDE]$/i.test(a))r.answers[qid]=a.toUpperCase()});set('v10_responses',responses);render();}
+function delResult(id){if(confirm('Excluir esta correção?')){responses=responses.filter(x=>x.id!==id);set('v10_responses',responses);render();}}
 function editQ(id){
  let q=questions.find(x=>x.id===id);if(!q)return;
  let type=prompt('Tipo: M = múltipla escolha | D = discursiva',q.type==='discursive'?'D':'M');if(type)q.type=type.toUpperCase()==='D'?'discursive':'multiple';
@@ -5118,7 +5069,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 <\/script>
-
 </body></html>`);
  w.document.close();
  // Render each QR after the window's DOM is ready.
@@ -5253,8 +5203,7 @@ function printWindowWithQRCodes(body,title,qrs){
  window.addEventListener('load',function(){
    setTimeout(function(){${scripts}},300);
  });
- <\/script>
-</body></html>`);
+ <\/script></body></html>`);
  w.document.close();
 }
 function printCards(){let old=$('cardOutput').innerHTML;if(!old){makeClassCards();old=$('cardOutput').innerHTML}printWindow(old,'Cartões')}
@@ -5280,10 +5229,9 @@ function managementCounts(){
 const APP_BACKUP_VERSION=1;
 const APP_BACKUP_KEYS=[
  'v10_questions','v10_students','v10_exams','v10_responses','v10_skills','v10_curriculum_skills',
- 'v11_classes','v10_classes','v10_plans','v10_saved_plans','v10_lesson_plans',
+ 'v11_classes','v10_classes','v10_plans','v10_saved_plans',
  'v10_exam_question_drafts','v10_active_exam_id','v10_profile',
- 'v10_settings','v10_class_schedule','v10_school_calendar',
- 'avaliamais_acompanhamento_v1','avaliamais_acomp_subjects_v1'
+ 'v10_settings','v10_class_schedule','v10_school_calendar'
 ];
 
 function buildFullBackup(){
@@ -6697,12 +6645,18 @@ function getClassRecordsForDashboard(){
 
 function dashboardResponsesForClass(className){
  const rs=[];
- canonicalActiveResponses().forEach(r=>{
+ const seen=new Set();
+ responses.forEach(r=>{
    const st=students.find(s=>String(s.id)===String(r.studentId));
    const ex=exams.find(e=>Number(e.id)===Number(r.examId));
    if(!st||!ex)return;
    const studentClass=normalizeClassName(st.cls||'');
+   const examClass=normalizeClassName(ex.cls||'');
    if(studentClass!==normalizeClassName(className))return;
+   // Avoid counting the same student's same exam/version twice.
+   const key=`${r.studentId}|${r.examId}|${r.version}`;
+   if(seen.has(key))return;
+   seen.add(key);
    rs.push(r);
  });
  return rs;
@@ -6861,7 +6815,6 @@ function renderDashboardClassPerformance(){
 }
 
 function renderSelectedClassPerformance(className){
- migrateResponseLaunchIntegrity();
  const box=$('classPerformanceReport');
  if(!box)return;
  const classes=getClassRecordsForDashboard();
@@ -7378,9 +7331,7 @@ function renderDailySchedule(targetDay,labelId,listId){
  }
  box.innerHTML=`<div class="daily-lesson-list">${data.map(x=>{
    const action={...x, _scheduleDate:date.toISOString().slice(0,10)};
-   const planDate=action._scheduleDate;
-   const planExists=typeof get==='function' && Array.isArray(get('v10_lesson_plans',[])) && get('v10_lesson_plans',[]).some(p=>String(p.classId||'')===String(x.classId||'') && normalizeKey(p.subject)===normalizeKey(x.subject||'') && String(p.date||'')===String(planDate));
-   return `<div class="daily-lesson" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><b>${esc(String(x.lesson||''))}ª Aula - ${esc(x.cls||'')}</b>${x.subject?` <span class="small">• ${esc(x.subject)}</span>`:''}</span><span class="toolbar" style="margin:0"><button type="button" class="secondary daily-lesson-action" onclick='openHomeAccompanimentLesson(${JSON.stringify(action)})'>📝 Acompanhar</button><button type="button" class="secondary daily-lesson-action" onclick='openHomeLessonPlan(${JSON.stringify(action)})'>${planExists?'📚 Ver planejamento':'📚 Planejar aula'}</button></span></div>`;
+   return `<button type="button" class="daily-lesson daily-lesson-action" onclick='openHomeAccompanimentLesson(${JSON.stringify(action)})'><span>${esc(String(x.lesson||''))}ª Aula - ${esc(x.cls||'')}</span><span>📝 Acompanhar</span></button>`;
  }).join('')}</div>`;
 }
 
@@ -7394,28 +7345,6 @@ function renderTodayAndTomorrowSchedule(){
 
 /* Integração real: o card "Aulas de hoje/amanhã" do Dashboard deve abrir o módulo de Acompanhamento,
    e não tentar abrir o modal enquanto a seção principal ainda está oculta. */
-function openHomeLessonPlan(schedule){
-  try{
-    if(!schedule || typeof schedule!=='object') throw new Error('Aula inválida.');
-    show('planning');
-    const plans=typeof get==='function'?get('v10_lesson_plans',[]):[];
-    const targetDate=String(schedule._scheduleDate||schedule.date||'');
-    const existing=Array.isArray(plans)?plans.filter(p=>String(p.classId||'')===String(schedule.classId||'') && normalizeKey(p.subject)===normalizeKey(schedule.subject||'') && String(p.date||'')===targetDate).sort((a,b)=>String(b.updated||b.created||'').localeCompare(String(a.updated||a.created||'')))[0]:null;
-    if(existing && typeof openLessonPlan==='function'){ openLessonPlan(existing.id); return; }
-    setTimeout(()=>{
-      try{
-        const c=$('lessonPlanClass'),sub=$('lessonPlanSubject'),dateSel=$('lessonPlanDate');
-        if(c){c.value=String(schedule.classId||''); if(typeof populateLessonPlanSubjectsP==='function')populateLessonPlanSubjectsP();}
-        if(sub){sub.value=String(schedule.subject||''); if(typeof populateLessonPlanDatesP==='function')populateLessonPlanDatesP();}
-        if(dateSel){const exact=targetDate+'|'+String(schedule.id||''); if([...dateSel.options].some(o=>o.value===exact))dateSel.value=exact; else if([...dateSel.options].some(o=>o.value.startsWith(targetDate+'|')))dateSel.value=[...dateSel.options].find(o=>o.value.startsWith(targetDate+'|')).value; if(typeof lessonPlanDateChanged==='function')lessonPlanDateChanged();}
-        const st=$('lessonPlanSaveStatus');if(st)st.innerHTML='<span style="color:#1d4ed8;font-weight:700">📚 Planejamento aberto para a aula de hoje.</span>';
-        const sec=document.getElementById('planning');if(sec)sec.scrollIntoView({behavior:'smooth',block:'start'});
-      }catch(e){console.error('Abrir planejamento da aula:',e)}
-    },80);
-  }catch(e){alert('Não foi possível abrir o planejamento: '+(e?.message||e));}
-}
-window.openHomeLessonPlan=openHomeLessonPlan;
-
 function openHomeAccompanimentLesson(schedule){
   try{
     if(!schedule || typeof schedule!=='object') throw new Error('Aula inválida.');
@@ -7528,7 +7457,7 @@ function renderDashboardAccompaniment(){
              <th>Não fez atividade</th>
              <th>Não trouxe livro</th>
              <th>Conversou</th>
-             <th>Dormindo</th>
+             <th>Perturbou</th>
              <th>Índice</th>
              <th>Aulas lançadas</th>
              <th>Último lançamento</th>
@@ -7736,7 +7665,7 @@ function renderManualStudentAnswers(){
    box.innerHTML='<div class="card"><div class="empty">Selecione um aluno para lançar as respostas.</div></div>';
    return;
  }
- const existing=responses.find(r=>String(r.studentId)===sid&&Number(r.examId)===Number(ex.id)&&String(r.version)===String(v.letter)&&!responseIsCancelled(r));
+ const existing=responses.find(r=>String(r.studentId)===sid&&Number(r.examId)===Number(ex.id)&&String(r.version)===String(v.letter));
  const answers=existing?.answers||{};
  let total=0,answered=0;
  v.questions.forEach(qid=>{
@@ -7782,8 +7711,8 @@ function saveManualStudentCorrection(){
  });
  if(!filled && !confirm('Nenhuma resposta foi marcada. Deseja salvar mesmo assim?'))return;
 
- const idx=responses.findIndex(r=>String(r.studentId)===sid&&Number(r.examId)===Number(ex.id)&&String(r.version)===String(v.letter)&&!responseIsCancelled(r));
- const record={...(idx>=0?responses[idx]:{}),id:idx>=0?responses[idx].id:Date.now()+Math.random(),studentId:s.id,examId:ex.id,version:v.letter,answers,source:'manual',cancelled:false,updatedAt:new Date().toISOString()};
+ const idx=responses.findIndex(r=>String(r.studentId)===sid&&Number(r.examId)===Number(ex.id)&&String(r.version)===String(v.letter));
+ const record={id:idx>=0?responses[idx].id:Date.now()+Math.random(),studentId:s.id,examId:ex.id,version:v.letter,answers,source:'manual'};
  if(idx>=0)responses[idx]=record;else responses.push(record);
  set('v10_responses',responses);
  alert(`Correção de ${s.name} salva com sucesso.`);
@@ -7888,8 +7817,8 @@ const AP=(()=>{
  const cls=cid=>classes().find(c=>String(c.id)===String(cid));
  const subj=cid=>classDisciplines(cid)[0]||subjects[String(cid)]||'Ciências';
  const disciplines=cid=>classDisciplines(cid);
- const modal=x=>{const m=$('apModal'),b=$('apModalBox');if(!m||!b)return;b.innerHTML=x;m.classList.add('open');m.setAttribute('aria-hidden','false')};
- const close=()=>{const m=$('apModal');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true')};
+ const modal=x=>{$('apModalBox').innerHTML=x;$('apModal').classList.add('open')};
+ const close=()=>{$('apModal').classList.remove('open')};
  function page(id){document.querySelectorAll('.ap-page').forEach(x=>x.style.display='none');const el=$('ap-'+id);if(el)el.style.display='block';render();}
  function render(){renderHome();renderClasses();renderSchedule();renderHistoryOpts();renderHistory();renderReportOpts();renderReport();}
  function lessonFor(date,period,classId,subject=''){return db.lessons.find(x=>x.date===date&&x.period===period&&String(x.classId)===String(classId)&&(!subject||String(x.subject||'')===String(subject)));}
@@ -7909,12 +7838,12 @@ const AP=(()=>{
  const skillsForClass=lessonCurriculumSkills(l.classId).filter(x=>!l.subject||normalizeClassName(x.subject).toLowerCase()===normalizeClassName(l.subject).toLowerCase()), currentSkill=skillsForClass.find(x=>String(x.code)===String(l.skillCode));
  modal(`<div class="toolbar" style="justify-content:space-between"><div><h2>${esc2(c?.name||'')} — ${esc2(l.period)}</h2><div class="ap-muted">${l.date.split('-').reverse().join('/')} • ${esc2(l.subject||subj(l.classId))}</div></div><div class="toolbar"><button class="danger" type="button" onclick="AP.deleteLesson('${lid}')">🗑️ Excluir acompanhamento</button><button onclick="AP.close()">Concluir</button></div></div>
  <div class="ap-card" style="background:#f7f9fc;margin-bottom:10px"><div class="ap-form"><div><label>Habilidade trabalhada nesta aula</label><select id="apLessonSkill" onchange="AP.lessonSkillChanged('${lid}')"><option value="">Não vinculada</option>${skillsForClass.map(x=>`<option value="${esc2(x.code)}" ${String(x.code)===String(l.skillCode)?'selected':''}>${esc2(x.code)} — ${esc2(x.text.slice(0,100))}</option>`).join('')}</select></div><div><label>Descritor / conteúdo trabalhado</label><select id="apLessonDescriptor"><option value="">Selecione a habilidade</option></select></div></div><div class="ap-muted" style="margin-top:6px">Vincule a aula ao que foi efetivamente ensinado. Isso alimenta o Mapa Curricular e o Ciclo Pedagógico.</div></div>
- <div class="ap-card" style="background:#f7f9fc"><b>Marque os indicadores de cada aluno.</b><div class="ap-muted">Aluno faltoso não entra nos cálculos de não realização da atividade, não trazer o livro, conversa e dormindo.</div></div><div style="overflow:auto"><table class="ap-table"><thead><tr><th>Aluno</th><th>Faltou</th><th>Não fez atividade</th><th>Não trouxe livro</th><th>Conversou</th><th>Dormindo</th></tr></thead><tbody>${st.map(s=>{const r=l.records[s.id];return `<tr class="${r.absent?'ap-absent-row':''}"><td><b>${esc2(s.name)}</b>${s.num?`<div class="ap-muted">Nº ${esc2(s.num)}</div>`:''}</td><td><input class="ap-check" type="checkbox" ${r.absent?'checked':''} onchange="AP.record('${lid}','${s.id}','absent',this.checked)"></td><td><input class="ap-check" type="checkbox" ${(!r.activity)?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','noActivity',this.checked)"></td><td><input class="ap-check" type="checkbox" ${(!r.book)?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','noBook',this.checked)"></td><td><input class="ap-check" type="checkbox" ${r.talk?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','talk',this.checked)"></td><td><input class="ap-check" type="checkbox" ${r.disturb?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','disturb',this.checked)"></td></tr>`}).join('')}</tbody></table></div>`);
+ <div class="ap-card" style="background:#f7f9fc"><b>Marque os indicadores de cada aluno.</b><div class="ap-muted">Aluno faltoso não entra nos cálculos de não realização da atividade, não trazer o livro, conversa e perturbação.</div></div><div style="overflow:auto"><table class="ap-table"><thead><tr><th>Aluno</th><th>Faltou</th><th>Não fez atividade</th><th>Não trouxe livro</th><th>Conversou</th><th>Perturbou</th></tr></thead><tbody>${st.map(s=>{const r=l.records[s.id];return `<tr class="${r.absent?'ap-absent-row':''}"><td><b>${esc2(s.name)}</b>${s.num?`<div class="ap-muted">Nº ${esc2(s.num)}</div>`:''}</td><td><input class="ap-check" type="checkbox" ${r.absent?'checked':''} onchange="AP.record('${lid}','${s.id}','absent',this.checked)"></td><td><input class="ap-check" type="checkbox" ${(!r.activity)?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','noActivity',this.checked)"></td><td><input class="ap-check" type="checkbox" ${(!r.book)?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','noBook',this.checked)"></td><td><input class="ap-check" type="checkbox" ${r.talk?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','talk',this.checked)"></td><td><input class="ap-check" type="checkbox" ${r.disturb?'checked':''} ${r.absent?'disabled':''} onchange="AP.record('${lid}','${s.id}','disturb',this.checked)"></td></tr>`}).join('')}</tbody></table></div>`);
  AP.lessonSkillChanged(lid);
  }
  function lessonSkillChanged(lid){const l=db.lessons.find(x=>x.id===lid);if(!l)return;const skillCode=String($('apLessonSkill')?.value||'');const s=lessonCurriculumSkills(l.classId).find(x=>String(x.code)===skillCode);const ds=s?normalizeDescriptors(s.descriptors):[];const d=$('apLessonDescriptor');if(!d)return;const old=l.skillDescriptor||'';d.innerHTML='<option value="">Selecione o descritor trabalhado</option>'+ds.map(x=>`<option value="${esc2(x)}">${esc2(x)}</option>`).join('');if(ds.includes(old))d.value=old;d.onchange=()=>{l.skillCode=skillCode;l.skillDescriptor=d.value||'';save();};l.skillCode=skillCode;l.skillDescriptor=ds.includes(old)?old:'';save();}
  function record(lid,sid,k,v){const l=db.lessons.find(x=>x.id===lid);if(!l)return;l.records[sid]??=(l.records[sid]={absent:false,activity:true,book:true,talk:false,disturb:false});const r=l.records[sid];if(k==='noActivity')r.activity=!v;else if(k==='noBook')r.book=!v;else r[k]=v;if(k==='absent'&&v){r.activity=true;r.book=true;r.talk=false;r.disturb=false;}save();openLesson(lid);renderHome();if(typeof window.renderDashboardAccompaniment==='function')window.renderDashboardAccompaniment();}
- function deleteLesson(lid){const l=db.lessons.find(x=>String(x.id)===String(lid));if(!l)return alert('Acompanhamento não encontrado.');const c=cls(l.classId);const label=`${l.date.split('-').reverse().join('/')} • ${l.period} • ${c?.name||'Turma'} • ${l.subject||subj(l.classId)}`;if(!confirm(`Excluir este acompanhamento?\n\n${label}\n\nOs lançamentos de presença, atividade, livro, conversa e dormindo desta aula serão apagados. O horário da aula permanecerá cadastrado.`))return;db.lessons=db.lessons.filter(x=>String(x.id)!==String(lid));save();close();render();if(typeof window.renderDashboardAccompaniment==='function')window.renderDashboardAccompaniment();alert('Acompanhamento excluído com sucesso.');}
+ function deleteLesson(lid){const l=db.lessons.find(x=>String(x.id)===String(lid));if(!l)return alert('Acompanhamento não encontrado.');const c=cls(l.classId);const label=`${l.date.split('-').reverse().join('/')} • ${l.period} • ${c?.name||'Turma'} • ${l.subject||subj(l.classId)}`;if(!confirm(`Excluir este acompanhamento?\n\n${label}\n\nOs lançamentos de presença, atividade, livro, conversa e perturbação desta aula serão apagados. O horário da aula permanecerá cadastrado.`))return;db.lessons=db.lessons.filter(x=>String(x.id)!==String(lid));save();close();render();if(typeof window.renderDashboardAccompaniment==='function')window.renderDashboardAccompaniment();alert('Acompanhamento excluído com sucesso.');}
  function deleteAllLessons(){const count=Array.isArray(db.lessons)?db.lessons.length:0;if(!count)return alert('O acompanhamento já está zerado. Não há lançamentos para apagar.');if(!confirm(`🗑️ ZERAR TODO O ACOMPANHAMENTO?\n\nSerão apagados os ${count} registros de aulas e TODOS os lançamentos de presença, atividade, livro e comportamento vinculados a essas aulas.\n\nSerão preservados: horários, turmas, alunos, disciplinas, avaliações, resultados e demais dados do Avalia+.\n\nEsta ação não pode ser desfeita.`))return;if(!confirm('⚠️ Última confirmação\n\nDeseja realmente apagar TODOS os acompanhamentos lançados e deixar o módulo zerado?'))return;db.lessons=[];save();close();render();if(typeof window.renderDashboardAccompaniment==='function')window.renderDashboardAccompaniment();alert('✅ Acompanhamento zerado com sucesso. Horários, turmas e alunos foram preservados.');}
  function pct(n,d){return d?Math.round((n/d)*10000)/100:0;}
  function stats(cid,from='',to='',subject=''){const st=studentsNow().filter(x=>String(x.classId)===String(cid)),ls=db.lessons.filter(l=>String(l.classId)===String(cid)&&(!subject||String(l.subject||'')===String(subject))&&(!from||l.date>=from)&&(!to||l.date<=to));let total=0,present=0,absent=0,noActivity=0,noBook=0,talk=0,disturb=0,ps={};st.forEach(s=>ps[s.id]={total:0,absent:0,none:0,partial:0,noBook:0,talk:0,disturb:0,a:0,b:0,p:0});ls.forEach(l=>st.forEach(s=>{const r=l.records[s.id];if(!r)return;total++;const z=ps[s.id];z.total++;if(r.absent){absent++;z.absent++;return;}present++;if(r.activity===false){noActivity++;z.none++;}else z.a++;if(r.book===false){noBook++;z.noBook++;}else z.b++;if(r.talk===true){talk++;z.talk++;}else z.p++;if(r.disturb===true){disturb++;z.disturb++;}}));const presence=pct(present,total),ap=pct(noActivity,present),bp=pct(noBook,present),tp=pct(talk,present),dp=pct(disturb,present);const activityGood=present?Math.round((100-ap)*100)/100:0,bookGood=present?Math.round((100-bp)*100)/100:0,talkGood=present?Math.round((100-tp)*100)/100:0,disturbGood=present?Math.round((100-dp)*100)/100:0;return{students:st,lessons:ls,ps,presence,absent:total?Math.round((absent/total)*10000)/100:0,activity:ap,book:bp,talk:tp,disturb:dp,activityGood,bookGood,talkGood,disturbGood,participation:Math.round(((100-tp)+(100-dp))*50)/100,index:total?Math.round((presence+activityGood+bookGood+talkGood+disturbGood)/5*100)/100:0}}
@@ -7930,7 +7859,7 @@ const AP=(()=>{
  $('apTodayLessons').innerHTML=`<h3 style="margin:14px 0 8px">Aulas de hoje <span class="ap-muted">${esc2(dateLabel)}</span></h3>`+(data.length?`<div class="ap-grid3">${data.map(s=>{const cid=classIdByName(s.cls),c=cls(cid),l=cid?lessonFor(today(),`${s.lesson}ª aula`,cid):null;return `<div class="ap-card ap-lesson" onclick='AP.openAvaliaSchedule(${JSON.stringify(s)})'><div class="toolbar" style="justify-content:space-between"><span class="ap-period">${esc2(s.lesson)}ª aula</span><span class="ap-badge ${l?'ap-good':'ap-neutral'}">${l?'Registrada':'Não registrada'}</span></div><div class="ap-class">${esc2(s.cls||'')}</div><div class="ap-muted">${esc2(s.subject||'')}</div><button style="width:100%;margin-top:10px">${l?'Abrir acompanhamento':'Iniciar acompanhamento'}</button></div>`}).join('')}</div>`:'<div class="ap-card ap-empty">Nenhuma aula cadastrada para hoje no horário de '+esc2(info.effectiveLabel)+'.</div>');
  const cid=sel.value,subject=$('apDashSubject')?.value||'';if(!cid){['apAbsent','apAct','apBook','apTalk','apDisturb'].forEach(x=>$(x).textContent='0%');['apAbsentCount','apActCount','apBookCount','apTalkCount','apDisturbCount'].forEach(x=>$(x).textContent='0 de 0');if($('apPresenceCount'))$('apPresenceCount').textContent='0';if($('apPresenceTotal'))$('apPresenceTotal').textContent='de 0 alunos';return}const z=stats(cid,'','',subject);const f=n=>Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:2})+'%';const totalReg=z.lessons.reduce((n,l)=>n+Object.keys(l.records||{}).length,0);const absentReg=z.lessons.reduce((n,l)=>n+Object.values(l.records||{}).filter(r=>r?.absent).length,0);const presentReg=Math.max(0,totalReg-absentReg);const noAct=z.ps?Object.values(z.ps).reduce((n,r)=>n+r.none,0):0;const noBook=z.ps?Object.values(z.ps).reduce((n,r)=>n+r.noBook,0):0;const talk=z.ps?Object.values(z.ps).reduce((n,r)=>n+r.talk,0):0;const disturb=z.ps?Object.values(z.ps).reduce((n,r)=>n+r.disturb,0):0;$('apAbsent').textContent=f(z.absent);$('apAct').textContent=f(z.activity);$('apBook').textContent=f(z.book);$('apTalk').textContent=f(z.talk);$('apDisturb').textContent=f(z.disturb);$('apAbsentCount').textContent=`${absentReg} de ${totalReg} alunos`;$('apActCount').textContent=`${noAct} de ${presentReg} presentes`;$('apBookCount').textContent=`${noBook} de ${presentReg} presentes`;$('apTalkCount').textContent=`${talk} de ${presentReg} presentes`;$('apDisturbCount').textContent=`${disturb} de ${presentReg} presentes`;if($('apPresenceCount'))$('apPresenceCount').textContent=String(presentReg);if($('apPresenceTotal'))$('apPresenceTotal').textContent=`de ${totalReg} alunos`;attention(cid,subject);renderClassPerf();
 }
- function renderClassPerf(){const rows=[];classes().forEach(c=>disciplines(c.id).forEach(d=>{const z=stats(c.id,'','',d);if(z.lessons.length)rows.push({c,d,z});}));$('apClassPerf').innerHTML=rows.length?`<table class="ap-table"><thead><tr><th>Turma</th><th>Disciplina</th><th>Alunos</th><th>Presença</th><th>Não fez atividade</th><th>Não trouxe livro</th><th>Conversou</th><th>Dormindo</th><th>Índice</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc2(x.c.name)}</b></td><td>${esc2(x.d)}</td><td>${x.z.students.length}</td><td>${x.z.presence}%</td><td>${x.z.activity}%</td><td>${x.z.book}%</td><td>${x.z.talk}%</td><td>${x.z.disturb}%</td><td><span class="ap-badge ${x.z.index>=80?'ap-good':x.z.index>=60?'ap-warn':'ap-bad'}">${x.z.index}%</span></td></tr>`).join('')}</tbody></table>`:'<div class="ap-empty">Nenhuma aula registrada por disciplina.</div>'}
+ function renderClassPerf(){const rows=[];classes().forEach(c=>disciplines(c.id).forEach(d=>{const z=stats(c.id,'','',d);if(z.lessons.length)rows.push({c,d,z});}));$('apClassPerf').innerHTML=rows.length?`<table class="ap-table"><thead><tr><th>Turma</th><th>Disciplina</th><th>Alunos</th><th>Presença</th><th>Não fez atividade</th><th>Não trouxe livro</th><th>Conversou</th><th>Perturbou</th><th>Índice</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc2(x.c.name)}</b></td><td>${esc2(x.d)}</td><td>${x.z.students.length}</td><td>${x.z.presence}%</td><td>${x.z.activity}%</td><td>${x.z.book}%</td><td>${x.z.talk}%</td><td>${x.z.disturb}%</td><td><span class="ap-badge ${x.z.index>=80?'ap-good':x.z.index>=60?'ap-warn':'ap-bad'}">${x.z.index}%</span></td></tr>`).join('')}</tbody></table>`:'<div class="ap-empty">Nenhuma aula registrada por disciplina.</div>'}
 function attention(cid,subject=''){
  const rows=studentsNow().filter(s=>String(s.classId)===String(cid)).map(s=>({s,z:studentStats(s.id,'','',subject)}));
  const metric={
@@ -7938,7 +7867,7 @@ function attention(cid,subject=''){
   none:{el:'apAttAct',label:'não realizou',pct:'activity',calc:z=>z?.activity||0},
   noBook:{el:'apAttBook',label:'não trouxe',pct:'book',calc:z=>z?.book||0},
   talk:{el:'apAttTalk',label:'conversa(s)',pct:'talk',calc:z=>z?.talk||0},
-  disturb:{el:'apAttDist',label:'vez(es) dormindo',pct:'disturb',calc:z=>z?.disturb||0}
+  disturb:{el:'apAttDist',label:'perturbação(ões)',pct:'disturb',calc:z=>z?.disturb||0}
  };
  Object.entries(metric).forEach(([k,m])=>{
   const a=rows.filter(x=>x.z&&x.z[k]>0).sort((x,y)=>{const d=y.z[k]-x.z[k];return d||String(x.s.name).localeCompare(String(y.s.name),'pt-BR');});
@@ -7968,47 +7897,11 @@ function attention(cid,subject=''){
  function createManual(){const subject=$('apMS')?.value||'';if(!subject)return alert('Selecione a disciplina.');const l=ensureLesson({date:$('apMD').value,period:$('apMP').value,classId:$('apMC').value,subject});close();openLesson(l.id)}
  function modalManualClassChanged(){const cid=$('apMC')?.value||'',sel=$('apMS');if(!sel)return;const old=sel.value;sel.innerHTML='<option value="">Selecione a disciplina</option>'+disciplines(cid).map(d=>`<option value="${esc2(d)}">${esc2(d)}</option>`).join('');if(disciplines(cid).includes(old))sel.value=old;else if(disciplines(cid).length===1)sel.value=disciplines(cid)[0]}
  function renderHistoryOpts(){const s=$('apHistStudent');if(!s)return;const old=s.value;s.innerHTML='<option value="">Selecione um aluno</option>'+studentsNow().map(a=>`<option value="${a.id}">${esc2(a.name)} — ${esc2(cls(a.classId)?.name||'')}</option>`).join('');if(studentsNow().some(a=>a.id===old))s.value=old}
- function renderHistory(){const sid=$('apHistStudent')?.value;if(!sid){$('apHistOut').innerHTML='';return}const s=studentsNow().find(x=>x.id===sid),z=studentStats(sid),ls=db.lessons.filter(l=>l.records[sid]).sort((a,b)=>b.date.localeCompare(a.date)||pn(b.period)-pn(a.period));$('apHistOut').innerHTML=`<div class="ap-grid4"><div class="ap-card ap-kpi"><small>Índice</small><strong>${z.index}%</strong></div><div class="ap-card ap-kpi"><small>Não realizou</small><strong>${z.none}</strong></div><div class="ap-card ap-kpi"><small>Não trouxe livro</small><strong>${z.noBook}</strong></div><div class="ap-card ap-kpi"><small>Conversou / dormindo</small><strong>${z.talk+z.disturb}</strong></div></div><div class="ap-card"><div class="toolbar" style="justify-content:space-between"><h3 style="margin:0">${esc2(s.name)}</h3><button class="danger" type="button" onclick="AP.deleteAllLessons()">🗑️ Apagar todos os acompanhamentos</button></div>${ls.length?`<table class="ap-table"><thead><tr><th>Data</th><th>Aula</th><th>Disciplina</th><th>Atividade</th><th>Livro</th><th>Conversou</th><th>Dormindo</th><th>Ação</th></tr></thead><tbody>${ls.map(l=>{const r=l.records[sid];return `<tr><td>${l.date.split('-').reverse().join('/')}</td><td>${esc2(l.period)}</td><td>${esc2(l.subject||subj(l.classId))}</td><td>${r.activity===false?'Não realizada':'Realizou'}</td><td>${r.book?'Sim':'Não'}</td><td>${r.talk?'Sim':'Não'}</td><td>${r.disturb?'Sim':'Não'}</td><td><button class="danger" type="button" style="padding:6px 8px" onclick="AP.deleteLesson('${l.id}')">🗑️ Excluir</button></td></tr>`}).join('')}</tbody></table>`:'<div class="ap-empty">Nenhum registro.</div>'}</div>`}
+ function renderHistory(){const sid=$('apHistStudent')?.value;if(!sid){$('apHistOut').innerHTML='';return}const s=studentsNow().find(x=>x.id===sid),z=studentStats(sid),ls=db.lessons.filter(l=>l.records[sid]).sort((a,b)=>b.date.localeCompare(a.date)||pn(b.period)-pn(a.period));$('apHistOut').innerHTML=`<div class="ap-grid4"><div class="ap-card ap-kpi"><small>Índice</small><strong>${z.index}%</strong></div><div class="ap-card ap-kpi"><small>Não realizou</small><strong>${z.none}</strong></div><div class="ap-card ap-kpi"><small>Não trouxe livro</small><strong>${z.noBook}</strong></div><div class="ap-card ap-kpi"><small>Conversou / perturbou</small><strong>${z.talk+z.disturb}</strong></div></div><div class="ap-card"><div class="toolbar" style="justify-content:space-between"><h3 style="margin:0">${esc2(s.name)}</h3><button class="danger" type="button" onclick="AP.deleteAllLessons()">🗑️ Apagar todos os acompanhamentos</button></div>${ls.length?`<table class="ap-table"><thead><tr><th>Data</th><th>Aula</th><th>Disciplina</th><th>Atividade</th><th>Livro</th><th>Conversou</th><th>Perturbou</th><th>Ação</th></tr></thead><tbody>${ls.map(l=>{const r=l.records[sid];return `<tr><td>${l.date.split('-').reverse().join('/')}</td><td>${esc2(l.period)}</td><td>${esc2(l.subject||subj(l.classId))}</td><td>${r.activity===false?'Não realizada':'Realizou'}</td><td>${r.book?'Sim':'Não'}</td><td>${r.talk?'Sim':'Não'}</td><td>${r.disturb?'Sim':'Não'}</td><td><button class="danger" type="button" style="padding:6px 8px" onclick="AP.deleteLesson('${l.id}')">🗑️ Excluir</button></td></tr>`}).join('')}</tbody></table>`:'<div class="ap-empty">Nenhum registro.</div>'}</div>`}
  function renderReportOpts(){const s=$('apRepClass');if(!s)return;const old=s.value;s.innerHTML='<option value="">Selecione</option>'+classes().map(c=>`<option value="${c.id}">${esc2(c.name)}</option>`).join('');if(classes().some(c=>String(c.id)===old))s.value=old;populateReportSubject();}
  function populateReportSubject(){const cid=$('apRepClass')?.value||'',sel=$('apRepSubject');if(!sel)return;const old=sel.value;sel.innerHTML='<option value="">Selecione a disciplina</option>'+disciplines(cid).map(d=>`<option value="${esc2(d)}">${esc2(d)}</option>`).join('');if(disciplines(cid).includes(old))sel.value=old;else if(disciplines(cid).length===1)sel.value=disciplines(cid)[0];}
  function selectReportClass(cid){$('apRepClass').value=cid;populateReportSubject();renderReport()}
- function renderReport(){
-  const cid=$('apRepClass')?.value,subject=$('apRepSubject')?.value||'',from=$('apRepFrom')?.value||'',to=$('apRepTo')?.value||'';
-  if(!cid){$('apRepOut').innerHTML='<div class="ap-card ap-empty">Selecione uma turma.</div>';return}
-  const z=stats(cid,from,to,subject),c=cls(cid);
-  const totalReg=z.lessons.reduce((n,l)=>n+Object.keys(l.records||{}).length,0);
-  const absent=z.students.reduce((n,s)=>n+(z.ps?.[s.id]?.absent||0),0);
-  const present=Math.max(0,totalReg-absent);
-  const noAct=z.students.reduce((n,s)=>n+(z.ps?.[s.id]?.none||0),0);
-  const noBook=z.students.reduce((n,s)=>n+(z.ps?.[s.id]?.noBook||0),0);
-  const talk=z.students.reduce((n,s)=>n+(z.ps?.[s.id]?.talk||0),0);
-  const sleep=z.students.reduce((n,s)=>n+(z.ps?.[s.id]?.disturb||0),0);
-  const pctN=(n,d)=>d?Math.round(n/d*10000)/100:0;
-  const range=from||to?`Período: ${from?from.split('-').reverse().join('/'):'início'} a ${to?to.split('-').reverse().join('/'):'fim'}`:'Todos os registros';
-  const rows=z.students.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR')).map(s=>{
-    const q=studentStats(s.id,from,to,subject);
-    const zz=z.ps?.[s.id]||{total:0,absent:0,none:0,noBook:0,talk:0,disturb:0};
-    return `<tr><td><b>${esc2(s.name)}</b></td><td>${zz.total}</td><td>${zz.absent}</td><td>${zz.none}</td><td>${zz.noBook}</td><td>${zz.talk}</td><td>${zz.disturb}</td><td><span class="ap-badge ${q.index>=80?'ap-good':q.index>=60?'ap-warn':'ap-bad'}">${q.index}%</span></td></tr>`;
-  }).join('');
-  $('apRepOut').innerHTML=`
-  <div class="ap-card"><div class="toolbar" style="justify-content:space-between;flex-wrap:wrap"><div><h3 style="margin:0">📊 Fechamento — ${esc2(c.name)}</h3><div class="ap-muted">${esc2(subject||subj(cid))} • ${range} • ${z.lessons.length} aula(s) registrada(s)</div></div><span class="ap-badge ${z.index>=80?'ap-good':z.index>=60?'ap-warn':'ap-bad'}">Índice ${z.index}%</span></div></div>
-  <div class="ap-grid4">
-   <div class="ap-card ap-kpi"><small>👥 Alunos</small><strong>${z.students.length}</strong></div>
-   <div class="ap-card ap-kpi"><small>📅 Aulas</small><strong>${z.lessons.length}</strong></div>
-   <div class="ap-card ap-kpi"><small>🧾 Registros</small><strong>${totalReg}</strong></div>
-   <div class="ap-card ap-kpi"><small>✅ Presenças</small><strong>${present}</strong></div>
-   <div class="ap-card ap-kpi"><small>🚫 Faltas</small><strong>${absent}</strong></div>
-   <div class="ap-card ap-kpi"><small>📝 Não fez atividade</small><strong>${noAct}</strong></div>
-   <div class="ap-card ap-kpi"><small>📚 Sem livro</small><strong>${noBook}</strong></div>
-   <div class="ap-card ap-kpi"><small>🗣️ Conversou</small><strong>${talk}</strong></div>
-   <div class="ap-card ap-kpi"><small>😴 Dormindo</small><strong>${sleep}</strong></div>
-  </div>
-  <div class="ap-card"><h3>Somatório da turma no período</h3><div class="ap-muted" style="margin-bottom:10px">Percentuais calculados sobre os registros do período: faltas sobre todos os registros; demais ocorrências sobre os presentes.</div><div class="ap-grid4">
-   <div><b>Faltas:</b> ${absent} (${pctN(absent,totalReg)}%)</div><div><b>Não realizou:</b> ${noAct} (${pctN(noAct,present)}%)</div><div><b>Sem livro:</b> ${noBook} (${pctN(noBook,present)}%)</div><div><b>Conversou:</b> ${talk} (${pctN(talk,present)}%)</div><div><b>Dormindo:</b> ${sleep} (${pctN(sleep,present)}%)</div><div><b>Presença:</b> ${pctN(present,totalReg)}%</div>
-  </div></div>
-  <div class="ap-card"><h3>Resumo por aluno</h3><div style="overflow:auto"><table class="ap-table"><thead><tr><th>Aluno</th><th>Registros</th><th>Faltas</th><th>Não fez atividade</th><th>Sem livro</th><th>Conversou</th><th>Dormindo</th><th>Índice</th></tr></thead><tbody>${rows||'<tr><td colspan="8">Nenhum registro no período.</td></tr>'}</tbody></table></div></div>`;
- }
-
+ function renderReport(){const cid=$('apRepClass')?.value,subject=$('apRepSubject')?.value||'';if(!cid){$('apRepOut').innerHTML='<div class="ap-card ap-empty">Selecione uma turma.</div>';return}const z=stats(cid,$('apRepFrom').value,$('apRepTo').value,subject),c=cls(cid);$('apRepOut').innerHTML=`<div class="ap-grid4"><div class="ap-card ap-kpi"><small>Índice geral</small><strong>${z.index}%</strong></div><div class="ap-card ap-kpi"><small>Faltou</small><strong>${z.absent}%</strong></div><div class="ap-card ap-kpi"><small>Não fez atividade</small><strong>${z.activity}%</strong></div><div class="ap-card ap-kpi"><small>Não trouxe livro</small><strong>${z.book}%</strong></div><div class="ap-card ap-kpi"><small>Conversou</small><strong>${z.talk}%</strong></div><div class="ap-card ap-kpi"><small>Perturbou</small><strong>${z.disturb}%</strong></div></div><div class="ap-card"><h3>${esc2(c.name)} — ${esc2(subject||subj(cid))}</h3><div class="ap-muted">${z.lessons.length} aula(s) no período</div><div style="overflow:auto"><table class="ap-table"><thead><tr><th>Aluno</th><th>Índice</th><th>Não fez atividade</th><th>Não trouxe livro</th><th>Conversou</th><th>Perturbou</th></tr></thead><tbody>${z.students.map(s=>{const q=studentStats(s.id,$('apRepFrom').value,$('apRepTo').value,subject);return `<tr><td><b>${esc2(s.name)}</b></td><td><span class="ap-badge ${q.index>=80?'ap-good':q.index>=60?'ap-warn':'ap-bad'}">${q.index}%</span></td><td>${q.none}</td><td>${q.noBook}</td><td>${q.talk}</td><td>${q.disturb}</td></tr>`}).join('')}</tbody></table></div></div>`}
  function backup(){const payload={version:1,generatedAt:new Date().toISOString(),acompanhamento:db,subjects,classes:ensureClassStore(),students:studentsNow()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));a.download='aval-mais-acompanhamento-backup.json';a.click();URL.revokeObjectURL(a.href)}
  function getClassStats(){
   const rows=[];
@@ -8109,7 +8002,7 @@ function updateAllDisciplineReferences(classId,oldName,newName){
  exams.forEach(e=>{if(String(e.classId)===String(classId)&&normalizeKey(e.subject)===old){e.subject=neu;e.disciplineId=disciplineRelId(classId,neu);(e.versions||[]).forEach(v=>(v.questions||[]).forEach(qid=>{const q=questions.find(q=>String(q.id)===String(qid));if(q){q.subject=neu;q.disciplineId=e.disciplineId;q.classId=String(classId);q.className=e.cls||q.className;}}));}});
  questions.forEach(q=>{if(String(q.classId)===String(classId)&&normalizeKey(q.subject)===old){q.subject=neu;q.disciplineId=disciplineRelId(classId,neu);}});
  const sch=getClassSchedule();sch.forEach(x=>{if(String(x.classId)===String(classId)&&normalizeKey(x.subject)===old){x.subject=neu;x.disciplineId=disciplineRelId(classId,neu);}});saveClassSchedule(sch);
- ['v10_plans','v10_ai_plans','v10_lesson_plans'].forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr)){arr.forEach(p=>{const s=p.skill||{};if(String(s.classId||p.classId)===String(classId)&&normalizeKey(s.subject||p.subject)===old){s.subject=neu;p.subject=neu;p.disciplineId=disciplineRelId(classId,neu);s.disciplineId=p.disciplineId;}});set(k,arr);}});
+ ['v10_plans','v10_ai_plans'].forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr)){arr.forEach(p=>{const s=p.skill||{};if(String(s.classId||p.classId)===String(classId)&&normalizeKey(s.subject||p.subject)===old){s.subject=neu;p.subject=neu;p.disciplineId=disciplineRelId(classId,neu);s.disciplineId=p.disciplineId;}});set(k,arr);}});
  try{const apRaw=localStorage.getItem('avaliamais_acompanhamento_v1');if(apRaw){const ap=JSON.parse(apRaw);(ap.lessons||[]).forEach(l=>{if(String(l.classId)===String(classId)&&normalizeKey(l.subject)===old){l.subject=neu;}});(ap.schedule||[]).forEach(x=>{if(String(x.classId)===String(classId)&&normalizeKey(x.subject)===old){x.subject=neu;}});localStorage.setItem('avaliamais_acompanhamento_v1',JSON.stringify(ap));}}catch(e){console.warn(e)}
  try{const sm=JSON.parse(localStorage.getItem('avaliamais_acomp_subjects_v1')||'{}');if(sm[String(classId)]&&normalizeKey(sm[String(classId)])===old)sm[String(classId)]=neu;localStorage.setItem('avaliamais_acomp_subjects_v1',JSON.stringify(sm));}catch(e){}
  set('v10_curriculum_skills',curriculumSkills);set('v10_exams',exams);set('v10_questions',questions);relationalIntegrityRepair(true);
@@ -8131,7 +8024,7 @@ function deleteDisciplineFromClass(cid,name){
    exams=exams.filter(e=>!relationMatches(e,cid,name));
    responses=responses.filter(r=>!exIds.some(id=>String(id)===String(r.examId)));
    const qIds=[];questions.forEach(q=>{if(exIds.some(id=>String(id)===String(q.examId))||relationMatches(q,cid,name))qIds.push(q.id);});questions=questions.filter(q=>!qIds.some(id=>String(id)===String(q.id)));
-   ['v10_plans','v10_ai_plans','v10_lesson_plans'].forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr))set(k,arr.filter(p=>!relationMatches(p.skill||p,cid,name)&&!(String(p.classId)===String(cid)&&normalizeKey(p.subject)===normalizeKey(name))));});
+   ['v10_plans','v10_ai_plans'].forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr))set(k,arr.filter(p=>!relationMatches(p.skill||p,cid,name)&&!(String(p.classId)===String(cid)&&normalizeKey(p.subject)===normalizeKey(name))));});
  } else if(!confirm(`Remover "${name}" desta turma? Nenhum dado vinculado será apagado.`))return;
  const sch=getClassSchedule().filter(x=>!relationMatches(x,cid,name));saveClassSchedule(sch);
  try{const ap=getAPDataSafe();ap.schedule=(ap.schedule||[]).filter(x=>!relationMatches(x,cid,name));ap.lessons=(ap.lessons||[]).filter(x=>!relationMatches(x,cid,name));localStorage.setItem('avaliamais_acompanhamento_v1',JSON.stringify(ap));const sm=JSON.parse(localStorage.getItem('avaliamais_acomp_subjects_v1')||'{}');if(normalizeKey(sm[String(cid)])===normalizeKey(name))delete sm[String(cid)];localStorage.setItem('avaliamais_acomp_subjects_v1',JSON.stringify(sm));}catch(e){}
@@ -8250,7 +8143,7 @@ function editClass(id){
  curriculumSkills.forEach(s=>{if(String(s.classId)===String(id))s.className=clean;});
  questions.forEach(q=>{if(String(q.classId)===String(id))q.className=clean;});
  const sch=getClassSchedule();sch.forEach(x=>{if(String(x.classId)===String(id))x.cls=clean;});saveClassSchedule(sch);
- const plansKeys=['v10_plans','v10_ai_plans','v10_lesson_plans'];plansKeys.forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr)){arr.forEach(p=>{if(String(p.classId||p.skill?.classId)===String(id)){p.className=clean;if(p.skill)p.skill.className=clean;}});set(k,arr);}});
+ const plansKeys=['v10_plans','v10_ai_plans'];plansKeys.forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr)){arr.forEach(p=>{if(String(p.classId||p.skill?.classId)===String(id)){p.className=clean;if(p.skill)p.skill.className=clean;}});set(k,arr);}});
  set('v10_students',students);set('v10_exams',exams);set('v10_curriculum_skills',curriculumSkills);set('v10_questions',questions);saveClassStore(classes);relationalIntegrityRepair(true);render();
 }
 function deleteClass(id){
@@ -8264,7 +8157,7 @@ function deleteClass(id){
  questions=questions.filter(q=>String(q.classId||'')!==String(id)&&!exIds.some(eid=>String(eid)===String(q.examId)));
  curriculumSkills=curriculumSkills.filter(s=>String(s.classId)!==String(id));
  const sch=getClassSchedule().filter(x=>String(x.classId)!==String(id));saveClassSchedule(sch);
- ['v10_plans','v10_ai_plans','v10_lesson_plans'].forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr))set(k,arr.filter(p=>String(p.classId||p.skill?.classId)!==String(id)));});
+ ['v10_plans','v10_ai_plans'].forEach(k=>{const arr=get(k,[]);if(Array.isArray(arr))set(k,arr.filter(p=>String(p.classId||p.skill?.classId)!==String(id)));});
  try{const ap=getAPDataSafe();ap.schedule=(ap.schedule||[]).filter(x=>String(x.classId)!==String(id));ap.lessons=(ap.lessons||[]).filter(x=>String(x.classId)!==String(id));localStorage.setItem('avaliamais_acompanhamento_v1',JSON.stringify(ap));const sm=JSON.parse(localStorage.getItem('avaliamais_acomp_subjects_v1')||'{}');delete sm[String(id)];localStorage.setItem('avaliamais_acomp_subjects_v1',JSON.stringify(sm));}catch(e){}
  students.forEach(s=>{if(String(s.classId)===String(id)){s.classId='';s.cls='';}});
  saveClassStore(ensureClassStore().filter(x=>String(x.id)!==String(id)));set('v10_students',students);set('v10_exams',exams);set('v10_questions',questions);set('v10_curriculum_skills',curriculumSkills);set('v10_responses',responses);selectedStudentClassId='';relationalIntegrityRepair(true);render();
@@ -8272,7 +8165,8 @@ function deleteClass(id){
 
 /* Planning-generated questions inherit the same curricular relation. */
 
-/* Acompanhamento já faz parte de APP_BACKUP_KEYS desde a definição principal. */
+/* Include the accompaniment database in the main backup/restore cycle. */
+['avaliamais_acompanhamento_v1','avaliamais_acomp_subjects_v1'].forEach(k=>{if(!APP_BACKUP_KEYS.includes(k))APP_BACKUP_KEYS.push(k);});
 function validateBackup(obj){
  if(!obj||obj.app!=='Avalia+'||obj.backupVersion!==APP_BACKUP_VERSION||!obj.data||typeof obj.data!=='object')return{ok:false,error:'Arquivo não reconhecido como backup válido do Avalia+.'};
  const arrayKeys=['v10_questions','v10_students','v10_exams','v10_responses','v10_skills','v10_curriculum_skills','v11_classes','v10_classes','v10_class_schedule','v10_school_calendar'];
@@ -8281,7 +8175,7 @@ function validateBackup(obj){
  return{ok:true};
 }
 function clearAll(){
- const keys=['v10_questions','v10_students','v10_exams','v10_responses','v10_curriculum_skills','v10_classes','v11_classes','v10_skills','v10_plans','v10_ai_plans','v10_lesson_plans','v10_ai_settings','v10_class_schedule','v10_school_calendar','avaliamais_acompanhamento_v1','avaliamais_acomp_subjects_v1','v10_exam_question_drafts','v10_active_exam_id'];
+ const keys=['v10_questions','v10_students','v10_exams','v10_responses','v10_curriculum_skills','v10_classes','v11_classes','v10_skills','v10_plans','v10_ai_plans','v10_ai_settings','v10_class_schedule','v10_school_calendar','avaliamais_acompanhamento_v1','avaliamais_acomp_subjects_v1','v10_exam_question_drafts','v10_active_exam_id'];
  if(!confirm('☢️ APAGAR TODOS OS DADOS DO APLICATIVO?\n\nSerão apagados todos os cadastros, avaliações, resultados, habilidades, planejamentos, horários, calendário e acompanhamento.'))return;
  if(!confirm('Última confirmação: realmente deseja zerar o aplicativo?'))return;
  keys.forEach(k=>localStorage.removeItem(k));questions=[];students=[];exams=[];responses=[];skills=[];curriculumSkills=[];selectedStudentClassId='';classesCache=null;if(typeof currentPlan!=='undefined')currentPlan=null;render();alert('Todos os dados do aplicativo foram apagados.');
@@ -8547,15 +8441,12 @@ async function printStudentPackets(ex,assignments,title){const w=window.open('',
    pages.forEach((x,i)=>{const f=document.createElement('div');f.className='v23-foot';f.textContent=(src.querySelector('.header-title')?.textContent||'AVALIAÇÃO')+' • '+src.dataset.name+' • Página '+(i+1)+' de '+pages.length;x.p.append(f)});return pages
  }
  const frag=document.createDocumentFragment();for(const src of document.querySelectorAll('.v23-source')){for(const p of await paginate(src))frag.append(p.p)}document.body.innerHTML='';document.body.append(frag);const b=document.createElement('button');b.className='no-print';b.textContent='Salvar em PDF / Imprimir';b.onclick=()=>window.print();document.body.append(b);${qrScripts}})();`;
-w.document.write(`<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${printCSS()}</style></head><body>${body}<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script><script>window.addEventListener('load',()=>setTimeout(()=>{${script}},200))<\/script>
-</body></html>`);w.document.close()}
+w.document.write(`<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${printCSS()}</style></head><body>${body}<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script><script>window.addEventListener('load',()=>setTimeout(()=>{${script}},200))<\/script></body></html>`);w.document.close()}
 window.printPackets=function(){const ex=typeof currentExam==='function'?currentExam():null;if(!ex)return alert('Gere uma avaliação primeiro.');if(typeof renderExportClass==='function')renderExportClass();const className=S($('exportClass')?.value);if(!className)return alert('Selecione uma turma para exportar.');const cls=classList().find(c=>K(c.name)===K(className));const sts=A(read('v10_students')).filter(s=>S(s.classId)===S(cls?.id)||(!s.classId&&K(s.cls)===K(className))).sort((a,b)=>K(a.name).localeCompare(K(b.name),'pt-BR'));if(!sts.length)return alert('Não há alunos cadastrados nessa turma.');if(!A(ex.versions).length)return alert('A avaliação não possui versões.');const assignments=sts.map((student,i)=>({student,v:ex.versions[i%ex.versions.length]}));printStudentPackets(ex,assignments,`${ex.name} — ${className} — impressão individual`)};
 
 /* Generic question/assessment PDF: always one column and Arial 12 for questions. */
-window.printWindow=function(body,title,extra=''){const w=window.open('','_blank');if(!w)return;const css=printCSS()+`.question-list,.question-columns,.student-question-list{column-count:1!important;columns:1!important;column-gap:0!important}.question-text{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;line-height:1.4!important;text-align:justify!important;text-justify:inter-word!important}.alt-text,.alt-item,.alts{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;text-align:left!important}.exam-question{margin-bottom:5mm!important;break-inside:avoid;page-break-inside:avoid}.question-image{max-width:90%!important;max-height:60mm!important}`;w.document.write(`<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}<button class="no-print" onclick="window.print()">Salvar em PDF / Imprimir</button>${extra}<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-</body></html>`);w.document.close()};
-window.printWindowWithQRCodes=function(body,title,qrs){const w=window.open('','_blank');if(!w)return;const scripts=A(qrs).map(q=>`(function(){const el=document.getElementById('qr-${q.id}-${q.version}');const t=${JSON.stringify(q.text)};if(!el)return;if(typeof QRCode!=='undefined'){try{new QRCode(el,{text:t,width:100,height:100});return}catch(e){}}el.textContent=t})()`).join('');const css=printCSS()+`.question-columns,.student-question-list,.one-page-questions{column-count:1!important;columns:1!important}.question-text{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;text-align:justify!important;text-justify:inter-word!important}.alt-text,.alt-item,.alts{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;text-align:left!important}`;w.document.write(`<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}<button class="no-print" onclick="window.print()">Salvar em PDF / Imprimir</button><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script><script>window.addEventListener('load',()=>setTimeout(()=>{${scripts}},250))<\/script>
-</body></html>`);w.document.close()};
+window.printWindow=function(body,title,extra=''){const w=window.open('','_blank');if(!w)return;const css=printCSS()+`.question-list,.question-columns,.student-question-list{column-count:1!important;columns:1!important;column-gap:0!important}.question-text{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;line-height:1.4!important;text-align:justify!important;text-justify:inter-word!important}.alt-text,.alt-item,.alts{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;text-align:left!important}.exam-question{margin-bottom:5mm!important;break-inside:avoid;page-break-inside:avoid}.question-image{max-width:90%!important;max-height:60mm!important}`;w.document.write(`<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}<button class="no-print" onclick="window.print()">Salvar em PDF / Imprimir</button>${extra}<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script></body></html>`);w.document.close()};
+window.printWindowWithQRCodes=function(body,title,qrs){const w=window.open('','_blank');if(!w)return;const scripts=A(qrs).map(q=>`(function(){const el=document.getElementById('qr-${q.id}-${q.version}');const t=${JSON.stringify(q.text)};if(!el)return;if(typeof QRCode!=='undefined'){try{new QRCode(el,{text:t,width:100,height:100});return}catch(e){}}el.textContent=t})()`).join('');const css=printCSS()+`.question-columns,.student-question-list,.one-page-questions{column-count:1!important;columns:1!important}.question-text{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;text-align:justify!important;text-justify:inter-word!important}.alt-text,.alt-item,.alts{font-family:Arial,Helvetica,sans-serif!important;font-size:12pt!important;text-align:left!important}`;w.document.write(`<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}<button class="no-print" onclick="window.print()">Salvar em PDF / Imprimir</button><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script><script>window.addEventListener('load',()=>setTimeout(()=>{${scripts}},250))<\/script></body></html>`);w.document.close()};
 
 /* Fix generic version export: remove obsolete undefined helpers and use the same stable renderer. */
 window.examVersionHTML=function(e,v,studentName='',studentId=''){const qs=A(v.questions).map((id,i)=>A(read('v10_questions')).find(q=>S(q.id)===S(id))).filter(Boolean);return `<div class="v23-generic-version"><div class="v23-card">${answerCardHTML(e,v,studentName,studentId)}</div>${examHeaderHTML(e,v,studentName)}<div class="v23-inst"><b>Instruções:</b> Leia atentamente as questões.</div><div class="v23-questions">${qs.map((q,i)=>qHTML(q,v,i)).join('')}</div></div>`};
@@ -9072,9 +8963,9 @@ try { window.AP = AP; } catch (e) { console.error("[Avalia+ V25.4] Falha ao expo
         if(value)filled++;
       });
       if(!filled&&!confirm('Nenhuma resposta objetiva foi marcada. Deseja salvar mesmo assim?'))return false;
-      const idx=responses.findIndex(r=>sid(r.studentId)===studentId&&num(r.examId)===num(ex.id));
+      const idx=responses.findIndex(r=>sid(r.studentId)===studentId&&num(r.examId)===num(ex.id)&&sid(r.version)===version);
       const previous=idx>=0?responses[idx]:{};
-      const record={...previous,id:previous.id||('RESP-'+Date.now()+'-'+Math.random().toString(36).slice(2,7)),studentId:st.id,examId:ex.id,version:v.letter,versionId:v.versionId||previous.versionId||'',classId:ex.classId||st.classId||previous.classId||'',studentClassId:st.classId||previous.studentClassId||'',subject:ex.subject||previous.subject||'',disciplineId:ex.disciplineId||previous.disciplineId||'',answers,source:'manual',cancelled:false,updatedAt:new Date().toISOString()};
+      const record={...previous,id:previous.id||('RESP-'+Date.now()+'-'+Math.random().toString(36).slice(2,7)),studentId:st.id,examId:ex.id,version:v.letter,versionId:v.versionId||previous.versionId||'',classId:ex.classId||st.classId||previous.classId||'',studentClassId:st.classId||previous.studentClassId||'',subject:ex.subject||previous.subject||'',disciplineId:ex.disciplineId||previous.disciplineId||'',answers,source:'manual',updatedAt:new Date().toISOString()};
       if(idx>=0)responses[idx]=record;else responses.push(record);
       if(!set('v10_responses',responses)){alert('Não foi possível gravar os dados no armazenamento local.');return false;}
       if(typeof manualState!=='undefined'){manualState.className=className;manualState.examId=examId;manualState.version=version;manualState.studentId=studentId;}
@@ -9105,8 +8996,85 @@ try { window.AP = AP; } catch (e) { console.error("[Avalia+ V25.4] Falha ao expo
     }catch(e){console.error(e);if(typeof oldRenderClassComparisonChart==='function')oldRenderClassComparisonChart()}
   };
 
-  /* ---------- Removido: painel de Correção rápida / Resultados recentes / Análise atual da página inicial ---------- */
-  /* Os módulos continuam disponíveis nas respectivas abas. */
+  /* ---------- Fluxo de correção + Resultados + Análise na página inicial ---------- */
+  function installHomeStable(){
+    const dash=$('dashboard');if(!dash||$('homeStableOperations'))return;
+    const anchor=dash.querySelector('.home-performance');
+    const wrap=document.createElement('div');wrap.id='homeStableOperations';wrap.className='home-stable-grid';
+    wrap.innerHTML=`
+      <div class="home-stable-card">
+        <h3>✍️ Correção rápida</h3>
+        <p class="small">Selecione os dados da correção diretamente na página inicial. O botão abre a correção manual já posicionada no contexto escolhido.</p>
+        <div class="grid">
+          <div><label>Turma</label><select id="homeStableClass"><option value="">Selecione</option></select></div>
+          <div><label>Avaliação</label><select id="homeStableExam"><option value="">Selecione</option></select></div>
+          <div><label>Versão</label><select id="homeStableVersion"><option value="">Selecione</option></select></div>
+          <div><label>Aluno</label><select id="homeStableStudent"><option value="">Selecione</option></select></div>
+        </div>
+        <div class="home-stable-actions"><button type="button" onclick="window.openHomeCorrectionStable()">✍️ Abrir correção</button><button type="button" class="secondary" onclick="show('scan')">📷 Corrigir cartão</button></div>
+        <div id="homeStableCorrectionStatus" class="small"></div>
+      </div>
+      <div class="home-stable-card">
+        <h3>📊 Resultados recentes</h3>
+        <div id="homeStableResultsSummary"></div>
+        <div class="home-stable-actions"><button type="button" class="secondary" onclick="show('results')">📊 Abrir Resultados</button></div>
+      </div>
+      <div class="home-stable-card">
+        <h3>🎯 Análise atual</h3>
+        <div id="homeStableAnalysisSummary"></div>
+        <div class="home-stable-actions"><button type="button" class="secondary" onclick="show('analysis')">🎯 Abrir Análise</button></div>
+      </div>`;
+    if(anchor)anchor.parentNode.insertBefore(wrap,anchor);else dash.appendChild(wrap);
+    $('homeStableClass').addEventListener('change',populateHomeStableExam);
+    $('homeStableExam').addEventListener('change',populateHomeStableVersionAndStudents);
+    $('homeStableVersion').addEventListener('change',populateHomeStableStudents);
+    populateHomeStableSelectors();
+  }
+  window.populateHomeStableSelectors=function(){
+    const cs=$('homeStableClass');if(!cs)return;
+    const old=cs.value;const classes=getClassesStable();cs.innerHTML='<option value="">Selecione a turma</option>'+classes.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');if(classes.includes(old))cs.value=old;
+    populateHomeStableExam();
+  };
+  window.populateHomeStableExam=function(){
+    const cs=$('homeStableClass'),es=$('homeStableExam');if(!cs||!es)return;
+    const old=es.value,cls=norm(cs.value);const list=exams.filter(e=>!cls||norm(e.cls)===cls);es.innerHTML='<option value="">Selecione a avaliação</option>'+list.map(e=>`<option value="${esc(sid(e.id))}">${esc(e.name||'Avaliação')}${e.subject?' — '+esc(e.subject):''}</option>`).join('');if(list.some(e=>sid(e.id)===sid(old)))es.value=old;populateHomeStableVersionAndStudents();
+  };
+  window.populateHomeStableVersionAndStudents=function(){
+    const es=$('homeStableExam'),vs=$('homeStableVersion');if(!es||!vs)return;
+    const ex=exams.find(e=>sid(e.id)===sid(es.value));const old=vs.value;const list=ex?.versions||[];vs.innerHTML='<option value="">Selecione a versão</option>'+list.map(v=>`<option value="${esc(sid(v.letter))}">Versão ${esc(v.letter)}</option>`).join('');if(list.some(v=>sid(v.letter)===sid(old)))vs.value=old;populateHomeStableStudents();
+  };
+  window.populateHomeStableStudents=function(){
+    const cs=$('homeStableClass'),ss=$('homeStableStudent');if(!cs||!ss)return;
+    const old=ss.value,cls=norm(cs.value);const list=students.filter(s=>!cls||norm(s.cls)===cls).sort((a,b)=>norm(a.name).localeCompare(norm(b.name),'pt-BR'));ss.innerHTML='<option value="">Selecione o aluno</option>'+list.map(s=>`<option value="${esc(sid(s.id))}">${esc(s.name||'Aluno')}</option>`).join('');if(list.some(s=>sid(s.id)===sid(old)))ss.value=old;
+  };
+  window.openHomeCorrectionStable=function(){
+    const cls=norm($('homeStableClass')?.value),examId=sid($('homeStableExam')?.value),version=sid($('homeStableVersion')?.value),studentId=sid($('homeStableStudent')?.value);
+    if(!cls||!examId||!version||!studentId){const box=$('homeStableCorrectionStatus');if(box)box.innerHTML='<span style="color:#a36a00">Selecione turma, avaliação, versão e aluno.</span>';return;}
+    if(typeof manualState!=='undefined'){manualState.className=cls;manualState.examId=examId;manualState.version=version;manualState.studentId=studentId;}
+    show('manualCorrection');
+  };
+  function renderHomeStableSummaries(){
+    const rb=$('homeStableResultsSummary'),ab=$('homeStableAnalysisSummary');
+    if(rb){
+      const valid=responses.filter(r=>students.some(s=>sid(s.id)===sid(r.studentId))&&exams.some(e=>num(e.id)===num(r.examId)));
+      if(!valid.length)rb.innerHTML='<div class="small">Nenhuma correção registrada ainda.</div>';
+      else{
+        const rows=valid.slice().sort((a,b)=>num(b.updatedAt?Date.parse(b.updatedAt):0)-num(a.updatedAt?Date.parse(a.updatedAt):0)).slice(0,5).map(r=>{const s=students.find(x=>sid(x.id)===sid(r.studentId)),e=exams.find(x=>num(x.id)===num(r.examId)),v=e?.versions?.find(x=>sid(x.letter)===sid(r.version));let ok=0,total=0;(v?.questions||[]).forEach(qid=>{const q=questions.find(q=>sid(q.id)===sid(qid));if(!q||q.type==='discursive')return;total++;if(isQuestionCorrect(r,qid,v,q))ok++});const p=total?percentage(ok,total):null;return `<div style="padding:7px 0;border-bottom:1px solid #edf1f4"><b>${esc(s?.name||'Aluno')}</b> • ${esc(e?.name||'Avaliação')} • ${p==null?'—':p+'%'}</div>`}).join('');
+        rb.innerHTML=rows;
+      }
+    }
+    if(ab){
+      try{
+        const st=typeof evaluationStats==='function'?evaluationStats():{responses:[],accuracy:0,studentsCount:0,examsCount:0,total:0};
+        ab.innerHTML=st.responses.length?`<div class="kpis"><div class="kpi"><span>Alunos</span><b>${st.studentsCount}</b></div><div class="kpi"><span>Avaliações</span><b>${st.examsCount}</b></div><div class="kpi"><span>Questões</span><b>${st.total}</b></div><div class="kpi"><span>Acerto</span><b>${st.accuracy}%</b></div></div>`:'<div class="small">Ainda não há dados suficientes para a análise.</div>';
+      }catch(e){ab.innerHTML='<div class="small">A análise estará disponível após a primeira correção.</div>'}
+    }
+  }
+  const oldDashboard=window.renderDashboard;
+  window.renderDashboard=function(){
+    try{if(typeof oldDashboard==='function')oldDashboard();}catch(e){console.error('Dashboard base V25.9',e)}
+    try{installHomeStable();populateHomeStableSelectors();renderHomeStableSummaries();}catch(e){console.error('Dashboard estável V25.9',e)}
+  };
 
   /* ---------- Encadeamento visual seguro dos filtros após alterações ---------- */
   window.clearResultsFilters=function(){['resultsClassSelect','resultsStudentSelect','resultsSubjectSelect','resultsExamSelect'].forEach(id=>{if($(id))$(id).value=''});window.renderResults()};
@@ -9120,137 +9088,36 @@ try { window.AP = AP; } catch (e) { console.error("[Avalia+ V25.4] Falha ao expo
     return {version:STABLE_VERSION,sections:rows,formulas,counts:{students:students.length,exams:exams.length,questions:questions.length,responses:responses.length}};
   };
 
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{try{installHomeStable();renderHomeStableSummaries()}catch(e){console.error(e)}},100));
 })();
-</script>
-<script>
-/* =====================================================================
-   AVALIA+ — PLANEJAMENTO DE AULA INTEGRADO À GRADE — V6
-   Formulário manual, data derivada dos horários e sequência persistente.
-===================================================================== */
+</script><script>
+/* Avalia+ V13 — integração explícita do percurso longitudinal na Análise */
 (function(){
-'use strict';
-const PLAN_KEY='v10_lesson_plans';
-const escP = v => (typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
-const arrP = v => Array.isArray(v)?v:[];
-function getLessonPlans(){const x=get(PLAN_KEY,[]);return Array.isArray(x)?x:[]}
-function saveLessonPlans(a){set(PLAN_KEY,a);}
-function classNameP(cid){return classById(cid)?.name||''}
-function subjectListP(cid){return typeof classDisciplines==='function'?classDisciplines(cid):[]}
-function skillsP(cid,subject){return getCurriculumSkills(cid,subject)||[]}
-function nextScheduledLessonsP(cid,subject,limit=20){
- const schedule=arrP(getClassSchedule()).filter(x=>String(x.classId||'')===String(cid)&&normalizeKey(x.subject)===normalizeKey(subject));
- if(!schedule.length)return [];
- const out=[], seen=new Set(), now=new Date();
- for(let i=0;i<70 && out.length<limit;i++){
-   const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i);
-   const eff=typeof getEffectiveScheduleDay==='function'?getEffectiveScheduleDay(d):d.getDay();
-   if(eff<1||eff>5)continue;
-   schedule.filter(x=>Number(x.day)===Number(eff)).sort((a,b)=>Number(a.lesson||99)-Number(b.lesson||99)).forEach(x=>{
-     if(out.length>=limit)return;
-     const iso=localISODate(d), key=iso+'|'+x.id;
-     if(seen.has(key))return; seen.add(key);
-     out.push({id:String(x.id),date:iso,shift:String(x.shift||''),lesson:Number(x.lesson||0),room:String(x.room||''),subject:String(x.subject||subject),day:Number(eff),cls:classNameP(cid)});
-   });
- }
- return out.sort((a,b)=>a.date.localeCompare(b.date)||Number(a.lesson)-Number(b.lesson));
-}
-function fmtDateP(iso){if(!iso)return '';const [y,m,d]=String(iso).split('-');return d&&m&&y?`${d}/${m}/${y}`:iso}
-function selectedScheduleP(){
- const cid=$('lessonPlanClass')?.value||'', subject=$('lessonPlanSubject')?.value||'', val=$('lessonPlanDate')?.value||'';
- const opts=nextScheduledLessonsP(cid,subject,40); return opts.find(x=>`${x.date}|${x.id}`===val)||opts.find(x=>x.date===val)||null;
-}
-function populateLessonPlanClassesP(){
- const sel=$('lessonPlanClass');if(!sel)return;const old=sel.value;const cs=curriculumClasses();
- sel.innerHTML='<option value="">Selecione a turma</option>'+cs.map(c=>`<option value="${escP(c.id)}">${escP(c.name)}${c.grade?` — ${escP(c.grade)}`:''}</option>`).join('');
- if(cs.some(c=>String(c.id)===String(old)))sel.value=old;
- const c=classById(sel.value);if($('lessonPlanGrade'))$('lessonPlanGrade').textContent=c?.grade?`Ano/etapa: ${c.grade}`:'';
- populateLessonPlanSubjectsP();
-}
-function populateLessonPlanSubjectsP(){
- const cid=$('lessonPlanClass')?.value||'',sel=$('lessonPlanSubject');if(!sel)return;const old=sel.value,subs=subjectListP(cid);
- sel.innerHTML='<option value="">Selecione a disciplina</option>'+subs.map(x=>`<option value="${escP(x)}">${escP(x)}</option>`).join('');
- if(subs.some(x=>normalizeKey(x)===normalizeKey(old)))sel.value=old;
- populateLessonPlanDatesP();populateLessonPlanSkillsP();
-}
-function populateLessonPlanDatesP(){
- const cid=$('lessonPlanClass')?.value||'',sub=$('lessonPlanSubject')?.value||'',sel=$('lessonPlanDate');if(!sel)return;const old=sel.value,opts=nextScheduledLessonsP(cid,sub,40);
- sel.innerHTML='<option value="">Selecione a data prevista no horário</option>'+opts.map(x=>`<option value="${escP(x.date+'|'+x.id)}">${escP(fmtDateP(x.date))} — ${escP(x.shift)} — ${x.lesson}ª aula${x.room?` — ${escP(x.room)}`:''}</option>`).join('');
- if(opts.some(x=>x.date+'|'+x.id===old))sel.value=old; else if(opts.length)sel.value=opts[0].date+'|'+opts[0].id;
- lessonPlanDateChanged();
-}
-function populateLessonPlanSkillsP(){
- const cid=$('lessonPlanClass')?.value||'',sub=$('lessonPlanSubject')?.value||'',sel=$('lessonPlanSkill');if(!sel)return;const old=sel.value,rows=skillsP(cid,sub);
- sel.innerHTML='<option value="">Selecione a habilidade</option>'+rows.map(x=>`<option value="${escP(x.id)}">${escP(x.code)} — ${escP(x.text||'').slice(0,120)}</option>`).join('');
- if(rows.some(x=>String(x.id)===String(old)))sel.value=old; else if(rows.length)sel.value=rows[0].id;
- lessonPlanSkillChanged();
-}
-function lessonPlanClassChanged(){
- const c=classById($('lessonPlanClass')?.value||'');if($('lessonPlanGrade'))$('lessonPlanGrade').textContent=c?.grade?`Ano/etapa: ${c.grade}`:'';
- populateLessonPlanSubjectsP();
-}
-function lessonPlanSubjectChanged(){populateLessonPlanDatesP();populateLessonPlanSkillsP();}
-function lessonPlanDateChanged(){
- const x=selectedScheduleP(),box=$('lessonPlanScheduleMeta');
- if(box)box.innerHTML=x?`<b>Horário:</b> ${escP(x.shift)} • ${x.lesson}ª aula${x.room?` • Sala ${escP(x.room)}`:''} • ${escP(WEEKDAY_NAMES[x.day]||'')}`:'<span class="small">Cadastre o horário da turma/disciplina para obter a data automaticamente.</span>';
-}
-function lessonPlanSkillChanged(){
- const s=skillsP($('lessonPlanClass')?.value||'',$('lessonPlanSubject')?.value||'').find(x=>String(x.id)===String($('lessonPlanSkill')?.value||''));
- const meta=$('lessonPlanSkillMeta'),box=$('lessonPlanDescriptors');
- if(meta)meta.innerHTML=s?`<b>${escP(s.code)}</b> — ${escP(s.text)}`:'';
- if(box){const ds=normalizeDescriptors(s?.descriptors||[]);box.innerHTML=ds.length?`<div class="small"><b>Descritor(es) relacionado(s):</b></div><div style="display:grid;gap:5px;margin-top:5px">${ds.map((d,i)=>`<label><input type="checkbox" class="lesson-plan-descriptor" value="${escP(d)}" checked> ${escP(d)}</label>`).join('')}</div>`:'<div class="small">Nenhum descritor cadastrado para esta habilidade.</div>';}
-}
-function descriptorValuesP(){return [...document.querySelectorAll('.lesson-plan-descriptor:checked')].map(x=>x.value)}
-function addLessonPlanStep(data={}){
- const box=$('lessonPlanSequence');if(!box)return;const row=document.createElement('div');row.className='card lesson-plan-step';row.style.marginBottom='8px';
- row.innerHTML=`<div class="grid"><div><label>Tempo</label><input class="lps-time" value="${escP(data.time||'')}" placeholder="Ex.: 10 min"></div><div><label>Etapa</label><input class="lps-stage" value="${escP(data.stage||'')}" placeholder="Ex.: Problematização"></div><div><label>Atividade / procedimento</label><textarea class="lps-activity" rows="3" placeholder="O que professor e estudantes farão?">${escP(data.activity||'')}</textarea></div><div><label>Recursos / avaliação</label><textarea class="lps-resources" rows="3" placeholder="Recursos e evidências de aprendizagem">${escP(data.resources||'')}</textarea></div></div><div class="toolbar"><button type="button" class="danger" onclick="this.closest('.lesson-plan-step').remove()">🗑️ Remover etapa</button></div>`;
- box.appendChild(row);
-}
-function getLessonPlanStepsP(){return [...document.querySelectorAll('.lesson-plan-step')].map(r=>({time:r.querySelector('.lps-time')?.value.trim()||'',stage:r.querySelector('.lps-stage')?.value.trim()||'',activity:r.querySelector('.lps-activity')?.value.trim()||'',resources:r.querySelector('.lps-resources')?.value.trim()||''})).filter(x=>x.time||x.stage||x.activity||x.resources)}
-function addLessonPlanLink(data={}){
- const box=$('lessonPlanLinks');if(!box)return;
- const row=document.createElement('div');row.className='card lesson-plan-link';row.style.marginBottom='8px';
- row.innerHTML=`<div class="grid"><div><label>Tipo</label><select class="lpl-type"><option value="Vídeo" ${data.type==='Vídeo'?'selected':''}>Vídeo</option><option value="Apresentação" ${data.type==='Apresentação'?'selected':''}>Apresentação</option><option value="Material" ${data.type==='Material'?'selected':''}>Material</option><option value="Outro" ${data.type==='Outro'?'selected':''}>Outro</option></select></div><div><label>Título / descrição</label><input class="lpl-title" value="${escP(data.title||'')}" placeholder="Ex.: Vídeo introdutório sobre fotossíntese"></div><div style="grid-column:span 2"><label>URL</label><input class="lpl-url" type="url" value="${escP(data.url||'')}" placeholder="https://..."></div></div><div class="toolbar" style="margin-top:8px"><button type="button" class="danger" onclick="this.closest('.lesson-plan-link').remove()">🗑️ Remover link</button></div>`;
- box.appendChild(row);
-}
-function getLessonPlanLinksP(){return [...document.querySelectorAll('.lesson-plan-link')].map(r=>({type:r.querySelector('.lpl-type')?.value||'Outro',title:r.querySelector('.lpl-title')?.value.trim()||'',url:r.querySelector('.lpl-url')?.value.trim()||''})).filter(x=>x.title||x.url)}
-function clearLessonPlanForm(){
- ['lessonPlanPrereq','lessonPlanTheme','lessonPlanMethodology','lessonPlanNextTask'].forEach(id=>{if($(id))$(id).value='';});
- const box=$('lessonPlanSequence');if(box){box.innerHTML='';addLessonPlanStep({time:'5 min',stage:'Abertura / problematização'});addLessonPlanStep({time:'30 min',stage:'Desenvolvimento'});addLessonPlanStep({time:'15 min',stage:'Síntese / avaliação'});} const links=$('lessonPlanLinks');if(links)links.innerHTML='';
- if($('lessonPlanSaveStatus'))$('lessonPlanSaveStatus').textContent='Formulário limpo. A data continua sendo escolhida a partir da grade.';
-}
-function saveLessonPlan(){
- const cid=$('lessonPlanClass')?.value||'',subject=$('lessonPlanSubject')?.value||'',skillId=$('lessonPlanSkill')?.value||'',sch=selectedScheduleP(),skill=skillsP(cid,subject).find(x=>String(x.id)===String(skillId));
- const prereq=$('lessonPlanPrereq')?.value.trim()||'',theme=$('lessonPlanTheme')?.value.trim()||'',method=$('lessonPlanMethodology')?.value.trim()||'',nextTask=$('lessonPlanNextTask')?.value.trim()||'',steps=getLessonPlanStepsP(),links=getLessonPlanLinksP();
- if(!cid)return alert('Selecione a turma.');if(!subject)return alert('Selecione a disciplina.');if(!sch)return alert('Selecione uma data que exista na grade de horários.');if(!skill)return alert('Selecione a habilidade.');if(!theme)return alert('Informe a temática principal / tema da aula.');if(!method)return alert('Informe a metodologia e os recursos.');if(!steps.length)return alert('Adicione pelo menos uma etapa à sequência didática.');
- const c=classById(cid);const now=new Date().toISOString();const base={classId:String(cid),className:c?.name||'',grade:c?.grade||'',subject,disciplineId:disciplineRelId(cid,subject),date:sch.date,scheduleId:sch.id,shift:sch.shift,lesson:sch.lesson,room:sch.room||'',skillId:String(skill.id),skill:{...skill},descriptors:descriptorValuesP(),prereq,theme,methodology:method,nextTask,links,sequence:steps};
- const plans=getLessonPlans();const editId=window._editingLessonPlanId;let message='Planejamento de aula salvo.';
- if(editId){const idx=plans.findIndex(x=>String(x.id)===String(editId));if(idx>=0){plans[idx]={...plans[idx],...base,updated:now};message='Planejamento de aula atualizado.';}else{plans.push({...base,id:'LP_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),created:now,updated:now});}}
- else plans.push({...base,id:'LP_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),created:now,updated:now});
- window._editingLessonPlanId='';saveLessonPlans(plans);renderSavedLessonPlans();if($('lessonPlanSaveStatus'))$('lessonPlanSaveStatus').innerHTML='<span style="color:#166534;font-weight:700">✅ '+message+'</span>';alert(message);
-}
-function renderSavedLessonPlanFiltersP(){
- const cs=$('savedLessonPlanClassFilter'),ss=$('savedLessonPlanSubjectFilter');if(!cs||!ss)return;const oldC=cs.value,oldS=ss.value,plans=getLessonPlans();
- cs.innerHTML='<option value="">Todas as turmas</option>'+curriculumClasses().map(c=>`<option value="${escP(c.id)}">${escP(c.name)}</option>`).join('');if([...cs.options].some(o=>o.value===oldC))cs.value=oldC;
- const subs=[...new Set(plans.filter(p=>!cs.value||String(p.classId)===String(cs.value)).map(p=>p.subject).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
- ss.innerHTML='<option value="">Todas as disciplinas</option>'+subs.map(x=>`<option value="${escP(x)}">${escP(x)}</option>`).join('');if(subs.some(x=>normalizeKey(x)===normalizeKey(oldS)))ss.value=oldS;
-}
-function renderSavedLessonPlans(){
- const box=$('savedLessonPlansList');if(!box)return;renderSavedLessonPlanFiltersP();const plans=getLessonPlans().filter(p=>{const c=$('savedLessonPlanClassFilter')?.value||'',s=$('savedLessonPlanSubjectFilter')?.value||'';return(!c||String(p.classId)===String(c))&&(!s||normalizeKey(p.subject)===normalizeKey(s));}).sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.className).localeCompare(String(b.className),'pt-BR'));
- if(!plans.length){box.innerHTML='<div class="empty">Nenhum planejamento gravado.</div>';return;}
- box.innerHTML=plans.map(p=>`<div class="card" style="margin-bottom:10px"><div class="toolbar" style="justify-content:space-between"><div><span class="badge green">${escP(p.className)}</span> <b>${escP(p.subject)}</b></div><span class="small"><b>${fmtDateP(p.date)}</b> • ${escP(p.shift)} • ${p.lesson}ª aula</span></div><p><b>${escP(p.skill?.code||'')}</b> — ${escP(p.theme)}</p><div class="small">${escP(p.skill?.text||'')}</div><div class="small" style="margin-top:6px"><b>Etapas:</b> ${p.sequence?.length||0} • <b>Descritores:</b> ${p.descriptors?.length||0}</div><div class="toolbar" style="margin-top:8px"><button class="secondary" onclick="openLessonPlan('${escP(p.id)}')">✏️ Editar</button><button class="secondary" onclick="viewLessonPlan('${escP(p.id)}')">👁️ Visualizar</button><button class="danger" onclick="deleteLessonPlan('${escP(p.id)}')">🗑️ Excluir</button></div></div>`).join('');
-}
-function fillLessonPlanFormP(p){
- const cid=String(p.classId||'');if($('lessonPlanClass'))$('lessonPlanClass').value=cid;populateLessonPlanSubjectsP();if($('lessonPlanSubject'))$('lessonPlanSubject').value=p.subject||'';populateLessonPlanDatesP();if($('lessonPlanDate'))$('lessonPlanDate').value=p.date+'|'+p.scheduleId;lessonPlanDateChanged();populateLessonPlanSkillsP();if($('lessonPlanSkill'))$('lessonPlanSkill').value=p.skillId||p.skill?.id||'';lessonPlanSkillChanged();
- $('lessonPlanPrereq').value=p.prereq||'';$('lessonPlanTheme').value=p.theme||'';$('lessonPlanMethodology').value=p.methodology||'';$('lessonPlanNextTask').value=p.nextTask||'';const box=$('lessonPlanSequence');box.innerHTML='';(p.sequence?.length?p.sequence:[{}]).forEach(addLessonPlanStep);const lbox=$('lessonPlanLinks');if(lbox){lbox.innerHTML='';(p.links||[]).forEach(addLessonPlanLink);};window._editingLessonPlanId=p.id;$('lessonPlanSaveStatus').textContent='Editando planejamento gravado. Salve para atualizar.';window.scrollTo({top:document.getElementById('planning')?.offsetTop||0,behavior:'smooth'});
-}
-function openLessonPlan(id){const p=getLessonPlans().find(x=>String(x.id)===String(id));if(p)fillLessonPlanFormP(p)}
-function viewLessonPlan(id){const p=getLessonPlans().find(x=>String(x.id)===String(id));if(!p)return;const html=`<div class="card"><h3>📚 ${escP(p.theme)}</h3><p><b>Turma:</b> ${escP(p.className)} • <b>Disciplina:</b> ${escP(p.subject)} • <b>Data:</b> ${fmtDateP(p.date)} • <b>Horário:</b> ${escP(p.shift)} • ${p.lesson}ª aula</p><p><b>Habilidade:</b> ${escP(p.skill?.code||'')} — ${escP(p.skill?.text||'')}</p><p><b>Pré-requisitos:</b><br>${escP(p.prereq||'Não informado').replace(/\n/g,'<br>')}</p><p><b>Metodologia e recursos:</b><br>${escP(p.methodology).replace(/\n/g,'<br>')}</p><p><b>Tarefas para o dia seguinte:</b><br>${escP(p.nextTask||'Não informado').replace(/\n/g,'<br>')}</p><h4>Links e materiais digitais</h4>${(p.links||[]).length?(p.links||[]).map(x=>`<div class="plan-block"><b>${escP(x.type)}:</b> ${escP(x.title||x.url)}${x.url?`<br><a href="${escP(x.url)}" target="_blank" rel="noopener noreferrer">🔗 Abrir link</a>`:''}</div>`).join(''):'<div class="small">Nenhum link cadastrado.</div>'}<h4>Sequência didática</h4>${(p.sequence||[]).map(x=>`<div class="plan-block"><b>${escP(x.time)} — ${escP(x.stage)}</b><p>${escP(x.activity)}</p><div class="small"><b>Recursos / avaliação:</b> ${escP(x.resources)}</div></div>`).join('')}</div>`;const box=$('savedLessonPlansList');box.innerHTML=html+'<div class="toolbar"><button class="secondary" onclick="renderSavedLessonPlans()">← Voltar para lista</button></div>'}
-function deleteLessonPlan(id){const plans=getLessonPlans(),p=plans.find(x=>String(x.id)===String(id));if(!p)return;if(!confirm(`Excluir o planejamento de ${p.className} — ${fmtDateP(p.date)}?`))return;saveLessonPlans(plans.filter(x=>String(x.id)!==String(id)));renderSavedLessonPlans();}
-function renderPlanningRegistry(){populateLessonPlanClassesP();renderSavedLessonPlans();if(!$('lessonPlanSequence')?.children.length)clearLessonPlanForm();}
-function renderPlan(){renderPlanningRegistry();}
-function renderSavedPlans(){renderSavedLessonPlans();}
-window.lessonPlanClassChanged=lessonPlanClassChanged;window.lessonPlanSubjectChanged=lessonPlanSubjectChanged;window.lessonPlanDateChanged=lessonPlanDateChanged;window.lessonPlanSkillChanged=lessonPlanSkillChanged;window.addLessonPlanStep=addLessonPlanStep;window.addLessonPlanLink=addLessonPlanLink;window.saveLessonPlan=saveLessonPlan;window.clearLessonPlanForm=clearLessonPlanForm;window.renderSavedLessonPlans=renderSavedLessonPlans;window.openLessonPlan=openLessonPlan;window.viewLessonPlan=viewLessonPlan;window.deleteLessonPlan=deleteLessonPlan;window.renderPlanningRegistry=renderPlanningRegistry;window.renderPlan=renderPlan;window.renderSavedPlans=renderSavedPlans;
-setTimeout(()=>{try{renderPlanningRegistry()}catch(e){console.error('Planejamento de aula:',e)}},50);
+ const q=id=>document.getElementById(id), norm=v=>String(v??'').trim().toLocaleLowerCase('pt-BR'), sid=v=>String(v??'').trim();
+ window.populateAnalysisStudentSelect=function(){
+  const sel=q('analysisStudentSelect'); if(!sel)return;
+  const cls=sid(q('analysisClassSelect')?.value||''), old=sid(sel.value||'');
+  const list=students.filter(s=>!cls||norm(s.cls)===norm(cls)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  sel.innerHTML='<option value="">👨‍🎓 Selecione um aluno</option>'+list.map(s=>`<option value="${esc(s.id)}">${esc(s.name||'Aluno')}${s.cls?' — '+esc(s.cls):''}</option>`).join('');
+  if(list.some(s=>sid(s.id)===old))sel.value=old;
+ };
+ window.selectAnalysisLongitudinalStudent=function(){
+  const id=sid(q('analysisStudentSelect')?.value||''), ls=q('longitudinalStudentSelect');
+  if(ls)ls.value=id;
+  if(typeof renderLongitudinalStudent==='function')renderLongitudinalStudent();
+ };
+ const oldRender=window.renderAnalysis;
+ window.renderAnalysis=function(){
+  try{if(typeof oldRender==='function')oldRender();}catch(e){console.error('Avalia+ V13 análise',e);}
+  try{populateAnalysisStudentSelect(); const id=sid(q('analysisStudentSelect')?.value||''),ls=q('longitudinalStudentSelect'); if(id&&ls)ls.value=id; if(typeof renderLongitudinalStudent==='function')renderLongitudinalStudent();}catch(e){console.error('Avalia+ V13 longitudinal',e);}
+ };
+ const oldClear=window.clearAnalysisFilters;
+ window.clearAnalysisFilters=function(){
+  ['analysisClassSelect','analysisSubjectSelect','analysisExamSelect','analysisStudentSelect'].forEach(id=>{if(q(id))q(id).value='';});
+  if(q('longitudinalStudentSearch'))q('longitudinalStudentSearch').value=''; if(q('longitudinalStudentSelect'))q('longitudinalStudentSelect').value='';
+  if(typeof oldClear==='function')oldClear(); else window.renderAnalysis();
+ };
+ const cls=q('analysisClassSelect'); if(cls)cls.addEventListener('change',()=>setTimeout(populateAnalysisStudentSelect,0));
+ document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{try{populateAnalysisStudentSelect();}catch(e){}},50));
 })();
-</script>
-</body>
+</script></body>
